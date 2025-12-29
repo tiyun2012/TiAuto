@@ -1,6 +1,6 @@
 import React from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { X, Copy, Trash2, Maximize2, Square, Circle } from 'lucide-react';
+import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 interface PropertiesPanelProps {
@@ -19,8 +19,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
     if (node.type === NodeType.GEMINI_CHECK && !isOutput) return 'text'; // Criteria
     if (node.type === NodeType.SIMULATE_RUN) return 'python';
     if (node.type === NodeType.PYTHON_EXEC && !isOutput) return 'python';
+    if (node.type === NodeType.SHELL_EXEC) return 'shell';
     return 'markdown';
   };
+
+  const currentShape = node.data.shape || 'rectangle';
 
   return (
     <div className="absolute right-0 top-0 h-full w-[500px] bg-gray-900 border-l border-gray-800 shadow-2xl z-40 flex flex-col animate-slide-in">
@@ -33,6 +36,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
             node.type === NodeType.GEMINI_CHECK ? 'bg-orange-500' :
             node.type === NodeType.SIMULATE_RUN ? 'bg-pink-500' : 
             node.type === NodeType.PYTHON_EXEC ? 'bg-yellow-600' :
+            node.type === NodeType.SHELL_EXEC ? 'bg-gray-500' :
             node.type === NodeType.VS_CODE ? 'bg-blue-500' : 
             node.type === NodeType.TODO_LIST ? 'bg-teal-500' : 'bg-yellow-500'
           }`}></span>
@@ -40,6 +44,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
            node.type === NodeType.GEMINI_CHECK ? 'Security Auditor' :
            node.type === NodeType.SIMULATE_RUN ? 'Simulator' : 
            node.type === NodeType.PYTHON_EXEC ? 'Python Runner' :
+           node.type === NodeType.SHELL_EXEC ? 'Shell Execution' :
            node.type === NodeType.VS_CODE ? 'VS Code Launcher' :
            node.type === NodeType.TODO_LIST ? 'Task List' :
            node.type.replace('_', ' ')}
@@ -72,15 +77,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Shape</label>
                 <div className="flex rounded-lg bg-gray-800 border border-gray-700 p-1">
                     <button 
+                        onClick={() => onUpdateNode(node.id, { shape: 'rectangle' })}
+                        className={`flex-1 flex justify-center p-1 rounded ${currentShape === 'rectangle' ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}
+                        title="Rectangle (Default)"
+                    >
+                        <RectangleHorizontal className="w-4 h-4" />
+                    </button>
+                    <button 
                         onClick={() => onUpdateNode(node.id, { shape: 'square' })}
-                        className={`flex-1 flex justify-center p-1 rounded ${!node.data.shape || node.data.shape === 'square' ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}
+                        className={`flex-1 flex justify-center p-1 rounded ${currentShape === 'square' ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}
                         title="Square"
                     >
                         <Square className="w-4 h-4" />
                     </button>
                     <button 
                         onClick={() => onUpdateNode(node.id, { shape: 'circle' })}
-                        className={`flex-1 flex justify-center p-1 rounded ${node.data.shape === 'circle' ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}
+                        className={`flex-1 flex justify-center p-1 rounded ${currentShape === 'circle' ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}
                          title="Circle"
                     >
                         <Circle className="w-4 h-4" />
@@ -112,6 +124,51 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
                             defaultLanguage="python"
                             value={node.data.code || ''}
                             onChange={(value) => onUpdateNode(node.id, { code: value })}
+                            theme="vs-dark"
+                            options={{ minimap: { enabled: false }, fontSize: 13 }}
+                        />
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* SHELL_EXEC Specific Input */}
+        {node.type === NodeType.SHELL_EXEC && (
+            <div className="space-y-4">
+                <div className="p-3 bg-gray-800/50 border border-gray-700 rounded-lg flex items-start gap-3">
+                    <div className={`p-2 rounded bg-gray-800 ${node.data.useAiSimulation ? 'text-blue-400' : 'text-gray-500'}`}>
+                        {node.data.useAiSimulation ? <Terminal className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <label className="text-xs font-bold text-gray-300 uppercase tracking-wider">Execution Mode</label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="checkbox" 
+                                id="aiSim" 
+                                checked={node.data.useAiSimulation ?? true}
+                                onChange={(e) => onUpdateNode(node.id, { useAiSimulation: e.target.checked })}
+                                className="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500/20"
+                            />
+                            <label htmlFor="aiSim" className="text-xs text-gray-400 cursor-pointer select-none">
+                                Simulate output with AI if in Browser
+                            </label>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">
+                            Uncheck this to attempt real execution (requires Desktop/Electron wrapper). Checked means Gemini will predict the output.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="space-y-2 flex flex-col h-48">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Shell Command</label>
+                    <div className="flex-1 border border-gray-700 rounded overflow-hidden">
+                        <Editor
+                            height="100%"
+                            defaultLanguage="shell"
+                            value={node.data.prompt || ''}
+                            onChange={(value) => onUpdateNode(node.id, { prompt: value })}
                             theme="vs-dark"
                             options={{ minimap: { enabled: false }, fontSize: 13 }}
                         />
@@ -162,7 +219,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
             </div>
         ) : (
              /* Prompt / Configuration Input for Other Nodes */
-             node.type !== NodeType.TRIGGER && node.type !== NodeType.PYTHON_EXEC && (
+             node.type !== NodeType.TRIGGER && node.type !== NodeType.PYTHON_EXEC && node.type !== NodeType.SHELL_EXEC && (
               <div className="space-y-2 flex flex-col h-64">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex justify-between">
                    <span>{node.type === NodeType.GEMINI_CHECK ? 'Check Criteria' : 'Prompt / Input'}</span>

@@ -1,6 +1,8 @@
+
 import { Node, Edge, NodeType } from '../types';
 import { generateCode, checkCode, simulateExecution } from './geminiService';
 import { runPythonCode } from './pyodideService';
+import { executeShellCommand } from './commandService';
 
 // Helper to find nodes that target a specific node
 const getParentNodes = (nodeId: string, nodes: Node[], edges: Edge[]): Node[] => {
@@ -68,6 +70,12 @@ export const executeNode = async (
             throw new Error("No code found to simulate.");
          }
          result = await simulateExecution(simContext);
+         break;
+      
+      case NodeType.SHELL_EXEC:
+         const shellContext = getContextFromParents(parents);
+         const command = node.data.prompt || "echo 'No command'";
+         result = await executeShellCommand(command, shellContext, node.data.useAiSimulation ?? true);
          break;
 
       case NodeType.PYTHON_EXEC:

@@ -3,7 +3,8 @@ import { NodeShape } from './types';
 
 // Dimensions
 export const NODE_DIMENSIONS = {
-  square: { width: 256, height: 120 }, // Base height, might expand content
+  rectangle: { width: 256, height: 120 }, // Previously 'square' (card style)
+  square: { width: 140, height: 140 },    // True square (compact)
   circle: { width: 140, height: 140 }
 };
 
@@ -13,13 +14,12 @@ export const NODE_BORDER_WIDTH = 2; // px
 export const getPortPosition = (
   nodeX: number, 
   nodeY: number, 
-  shape: NodeShape = 'square', 
+  shape: NodeShape = 'rectangle', 
   handle: string = 'right'
 ) => {
-  const dims = NODE_DIMENSIONS[shape] || NODE_DIMENSIONS.square;
+  // Default to rectangle if shape is undefined or unknown
+  const dims = NODE_DIMENSIONS[shape] || NODE_DIMENSIONS.rectangle;
   const w = dims.width;
-  // Note: For squares with dynamic height, this is an approximation for the connection lines.
-  // In a real DOM scenario, we might need the actual ref height, but fixed anchors are cleaner for now.
   const h = dims.height; 
 
   const centerX = nodeX + w / 2;
@@ -37,10 +37,10 @@ export const getPortPosition = (
     }
   }
 
-  // Square Logic
+  // Rectangle & Square Logic (Box based)
   switch (handle) {
     case 'top': return { x: centerX, y: nodeY };
-    case 'bottom': return { x: centerX, y: nodeY + h }; // If square grows, this might be off unless we use ref.
+    case 'bottom': return { x: centerX, y: nodeY + h };
     case 'left': return { x: nodeX, y: centerY };
     case 'right': return { x: nodeX + w, y: centerY };
     default: return { x: nodeX + w, y: centerY };

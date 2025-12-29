@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, Pin, PinOff, Eye } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, Pin, PinOff, Eye, SquareTerminal } from 'lucide-react';
 import { NODE_DIMENSIONS } from '../constants';
 
 interface NodeComponentProps {
@@ -23,7 +23,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
     node, isSelected, onMouseDown, onContextMenu, onPortMouseDown, onPortMouseUp 
 }) => {
   const { type, data, id } = node;
-  const shape: NodeShape = data.shape || 'square';
+  const shape: NodeShape = data.shape || 'rectangle';
   const width = NODE_DIMENSIONS[shape].width;
   const height = NODE_DIMENSIONS[shape].height;
 
@@ -37,7 +37,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
 
   // Categorize
   const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN].includes(type);
-  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST].includes(type);
+  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC].includes(type);
   const isNote = type === NodeType.NOTE;
 
   switch (type) {
@@ -61,6 +61,11 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       colorClass = "border-pink-500 bg-gray-800";
       titleColor = "text-pink-400";
       break;
+    case NodeType.SHELL_EXEC:
+      Icon = SquareTerminal;
+      colorClass = "border-gray-500 bg-gray-900";
+      titleColor = "text-gray-300";
+      break;
     case NodeType.PYTHON_EXEC:
       Icon = Binary;
       colorClass = "border-yellow-600 bg-gray-800";
@@ -83,7 +88,11 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       break;
   }
   
-  const shapeClasses = shape === 'circle' ? 'rounded-full' : 'rounded-lg';
+  // Shape-specific styling
+  let shapeClasses = 'rounded-lg'; // Default for rectangle
+  if (shape === 'circle') shapeClasses = 'rounded-full';
+  if (shape === 'square') shapeClasses = 'rounded-2xl'; // Slightly rounded square
+
   const baseClasses = `absolute shadow-lg border-2 transition-shadow duration-200 cursor-move group select-none ${
     isSelected ? 'ring-2 ring-white/50 z-20' : 'z-10'
   } ${isNote ? colorClass : colorClass} ${shapeClasses}`;
@@ -99,6 +108,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   const getWidgetContent = () => {
       if (type === NodeType.VS_CODE) return data.todo || `Path: ${data.prompt}`;
       if (type === NodeType.PYTHON_EXEC) return data.code || "Executes connected Python code.";
+      if (type === NodeType.SHELL_EXEC) return data.prompt || "Execute Shell Command";
       if (type === NodeType.TODO_LIST) return data.todo;
       if (data.output) return data.output;
       return data.prompt || "No details.";
@@ -107,12 +117,8 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   const renderContent = () => {
       // --- CIRCLE SHAPE ---
       if (shape === 'circle') {
-          // Calculate SVG path for text curve
           const r = width / 2;
-          const textRadius = r - 16; // slightly inside border
-          // Path definition: M startX startY A radius radius 0 largeArcSweepFlag sweepFlag endX endY
-          // We want a top arc. Start left-mid, arc up, end right-mid.
-          // Note: ID must be unique per node for textPath to work correctly
+          const textRadius = r - 16;
           const pathId = `curve-${id}`;
           
           return (
@@ -139,8 +145,23 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
               </div>
           );
       }
+
+      // --- SQUARE SHAPE (True Square) ---
+      if (shape === 'square') {
+          return (
+              <div className="relative w-full h-full flex flex-col items-center justify-center p-2 text-center">
+                  <div className="mb-2">
+                     <Icon className={`w-10 h-10 ${titleColor}`} />
+                  </div>
+                  <span className={`font-bold text-xs leading-tight line-clamp-2 px-1 ${isNote ? 'text-yellow-900' : 'text-gray-200'}`}>
+                    {data.label}
+                  </span>
+                  <div className="mt-2">{renderStatus()}</div>
+              </div>
+          );
+      }
       
-      // --- SQUARE SHAPE ---
+      // --- RECTANGLE SHAPE (Default Wide) ---
       return (
         <div className={`p-3 h-full flex flex-col ${isNote ? '' : 'text-gray-100'}`}>
             {/* Header */}
@@ -167,16 +188,22 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                 </div>
             </div>
 
-            {/* Note Body (Notes keep their text visible always) */}
+            {/* Note Body */}
             {isNote && (
                  <div className="text-xs text-yellow-900 font-sans p-1 flex-1 overflow-hidden">
                     {data.prompt || "Note..."}
                 </div>
             )}
+
+            {/* Shell Body: Show command preview */}
+            {type === NodeType.SHELL_EXEC && (
+                 <div className="text-[10px] text-gray-400 font-mono p-1 bg-black/40 rounded border border-gray-700/50 overflow-hidden whitespace-nowrap">
+                    $ {data.prompt || "echo 'hello'"}
+                </div>
+            )}
             
-            {/* Square nodes no longer show inline preview text. 
-                Instead, they rely on the Hover Widget below. */}
-            {!isNote && (
+            {/* Rectangle Nodes: Center Eye Icon for preview hint (Except Shell) */}
+            {!isNote && type !== NodeType.SHELL_EXEC && (
                 <div className="flex-1 flex items-center justify-center opacity-30">
                     <Eye className="w-6 h-6 text-gray-500" />
                 </div>

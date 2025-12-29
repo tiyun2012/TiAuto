@@ -1,6 +1,6 @@
 import React from 'react';
 import { NodeType } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, SquareTerminal } from 'lucide-react';
 
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
@@ -52,6 +52,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
             onClick={() => onAddNode(NodeType.GEMINI_CHECK)}
             type={NodeType.GEMINI_CHECK} 
         />
+         <ToolButton 
+            icon={<SquareTerminal />} 
+            label="Shell" 
+            color="text-gray-200" 
+            onClick={() => onAddNode(NodeType.SHELL_EXEC)}
+            type={NodeType.SHELL_EXEC} 
+        />
         <ToolButton 
             icon={<Terminal />} 
             label="Sim" 
@@ -99,7 +106,7 @@ const ToolButton = ({ icon, label, onClick, color, type }: { icon: any, label: s
     };
 
     const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN].includes(type);
-    const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST].includes(type);
+    const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC].includes(type);
 
     return (
         <div 

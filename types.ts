@@ -5,22 +5,24 @@ export enum NodeType {
   GEMINI_CHECK = 'GEMINI_CHECK',
   SIMULATE_RUN = 'SIMULATE_RUN',
   PYTHON_EXEC = 'PYTHON_EXEC',
+  SHELL_EXEC = 'SHELL_EXEC',
   VS_CODE = 'VS_CODE',
   TODO_LIST = 'TODO_LIST',
   NOTE = 'NOTE'
 }
 
-export type NodeShape = 'square' | 'circle';
+export type NodeShape = 'rectangle' | 'square' | 'circle';
 
 export interface NodeData {
   label: string;
-  shape?: NodeShape; // 'square' | 'circle'
-  prompt?: string; // For AI nodes, or path for VS Code
+  shape?: NodeShape; // 'rectangle' | 'square' | 'circle'
+  prompt?: string; // For AI nodes, or path for VS Code, or Command for Shell
   todo?: string; // For Task Lists or Manual Instructions
   dependencies?: string; // Comma separated list of python packages
   code?: string; // For output or static code
   systemInstruction?: string;
   model?: string;
+  useAiSimulation?: boolean; // For Shell Node: Use AI to mock output if in browser
   output?: string; // The result of execution
   status?: 'idle' | 'running' | 'success' | 'error';
   errorMessage?: string;
@@ -61,7 +63,7 @@ export const INITIAL_NODES: Node[] = [
     position: { x: 300, y: 200 },
     data: { 
       label: 'Generate Python Script', 
-      shape: 'square',
+      shape: 'rectangle',
       prompt: 'Write a Python script to calculate the Fibonacci sequence up to n=10.',
       status: 'idle' 
     }
@@ -72,7 +74,7 @@ export const INITIAL_NODES: Node[] = [
     position: { x: 600, y: 200 },
     data: { 
       label: 'Security Audit', 
-      shape: 'square',
+      shape: 'rectangle',
       prompt: 'Analyze the code for any infinite loops or security issues.',
       status: 'idle' 
     }

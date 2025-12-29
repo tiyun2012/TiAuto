@@ -41,6 +41,7 @@ export default function App() {
                type === NodeType.TODO_LIST ? 'Task List' :
                type === NodeType.TRIGGER ? 'Manual Trigger' : 'Note',
         status: 'idle',
+        shape: 'rectangle', // Default to rectangle
         prompt: type === NodeType.GEMINI_GENERATE ? 'Write code to...' :
                 type === NodeType.GEMINI_CHECK ? 'Check for security flaws.' : 
                 type === NodeType.VS_CODE ? '' : '',
