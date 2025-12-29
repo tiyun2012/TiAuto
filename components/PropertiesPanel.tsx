@@ -18,6 +18,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
     if (node.type === NodeType.GEMINI_GENERATE && isOutput) return 'python';
     if (node.type === NodeType.GEMINI_CHECK && !isOutput) return 'text'; // Criteria
     if (node.type === NodeType.SIMULATE_RUN) return 'python';
+    if (node.type === NodeType.PYTHON_EXEC && !isOutput) return 'python';
     return 'markdown';
   };
 
@@ -31,12 +32,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
             node.type === NodeType.GEMINI_GENERATE ? 'bg-purple-500' :
             node.type === NodeType.GEMINI_CHECK ? 'bg-orange-500' :
             node.type === NodeType.SIMULATE_RUN ? 'bg-pink-500' : 
-            node.type === NodeType.VS_CODE ? 'bg-blue-500' : 'bg-yellow-500'
+            node.type === NodeType.PYTHON_EXEC ? 'bg-yellow-600' :
+            node.type === NodeType.VS_CODE ? 'bg-blue-500' : 
+            node.type === NodeType.TODO_LIST ? 'bg-teal-500' : 'bg-yellow-500'
           }`}></span>
           {node.type === NodeType.GEMINI_GENERATE ? 'Code Generator' :
            node.type === NodeType.GEMINI_CHECK ? 'Security Auditor' :
            node.type === NodeType.SIMULATE_RUN ? 'Simulator' : 
+           node.type === NodeType.PYTHON_EXEC ? 'Python Runner' :
            node.type === NodeType.VS_CODE ? 'VS Code Launcher' :
+           node.type === NodeType.TODO_LIST ? 'Task List' :
            node.type.replace('_', ' ')}
         </h2>
         <div className="flex gap-2">
@@ -63,25 +68,80 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
           />
         </div>
 
-        {/* VS Code Specific Input */}
-        {node.type === NodeType.VS_CODE ? (
-            <div className="space-y-2">
-                <label className="text-xs font-bold text-blue-400 uppercase tracking-wider">Local Project Path</label>
+        {/* Python Execution Specific Input */}
+        {node.type === NodeType.PYTHON_EXEC && (
+             <div className="space-y-2">
+                <label className="text-xs font-bold text-yellow-500 uppercase tracking-wider">Environment Setup (Pip)</label>
                 <input
                     type="text"
-                    value={node.data.prompt || ''}
-                    placeholder="/Users/username/projects/my-app"
-                    onChange={(e) => onUpdateNode(node.id, { prompt: e.target.value })}
+                    value={node.data.dependencies || ''}
+                    placeholder="numpy, pandas, pytz"
+                    onChange={(e) => onUpdateNode(node.id, { dependencies: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
                 />
                 <p className="text-[10px] text-gray-500">
-                    Enter the absolute path to the file or folder you want to open. 
-                    Uses <code>vscode://file/path</code> protocol.
+                    Comma separated list of pure-python packages to install via micropip (e.g. <code>numpy, pandas</code>).
                 </p>
+                
+                <div className="mt-4 space-y-2 flex flex-col h-40">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Code</label>
+                    <div className="flex-1 border border-gray-700 rounded overflow-hidden">
+                        <Editor
+                            height="100%"
+                            defaultLanguage="python"
+                            value={node.data.code || ''}
+                            onChange={(value) => onUpdateNode(node.id, { code: value })}
+                            theme="vs-dark"
+                            options={{ minimap: { enabled: false }, fontSize: 13 }}
+                        />
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* VS Code Specific Input */}
+        {node.type === NodeType.VS_CODE ? (
+            <>
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-blue-400 uppercase tracking-wider">Local Project Path</label>
+                    <input
+                        type="text"
+                        value={node.data.prompt || ''}
+                        placeholder="/Users/username/projects/my-app"
+                        onChange={(e) => onUpdateNode(node.id, { prompt: e.target.value })}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                    />
+                    <p className="text-[10px] text-gray-500">
+                        Enter absolute path. Opens <code>vscode://file/path</code>.
+                    </p>
+                </div>
+                
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-teal-400 uppercase tracking-wider">Instructions / Tasks</label>
+                    <textarea
+                        value={node.data.todo || ''}
+                        placeholder="- [ ] Review main.py&#10;- [ ] Run unit tests"
+                        onChange={(e) => onUpdateNode(node.id, { todo: e.target.value })}
+                        className="w-full h-32 bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-sans"
+                    />
+                    <p className="text-[10px] text-gray-500">
+                        These instructions will be displayed in the output when the node runs.
+                    </p>
+                </div>
+            </>
+        ) : node.type === NodeType.TODO_LIST ? (
+            <div className="space-y-2">
+                <label className="text-xs font-bold text-teal-400 uppercase tracking-wider">Checklist Items</label>
+                <textarea
+                    value={node.data.todo || ''}
+                    placeholder="- [ ] Step 1&#10;- [ ] Step 2"
+                    onChange={(e) => onUpdateNode(node.id, { todo: e.target.value })}
+                    className="w-full h-64 bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-sans"
+                />
             </div>
         ) : (
              /* Prompt / Configuration Input for Other Nodes */
-             node.type !== NodeType.TRIGGER && (
+             node.type !== NodeType.TRIGGER && node.type !== NodeType.PYTHON_EXEC && (
               <div className="space-y-2 flex flex-col h-64">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex justify-between">
                    <span>{node.type === NodeType.GEMINI_CHECK ? 'Check Criteria' : 'Prompt / Input'}</span>

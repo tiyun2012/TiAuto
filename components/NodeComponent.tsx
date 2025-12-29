@@ -1,16 +1,17 @@
 import React from 'react';
 import { Node, NodeType } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary } from 'lucide-react';
 import { NODE_WIDTH, NODE_PORT_OFFSET_Y } from '../constants';
 
 interface NodeComponentProps {
   node: Node;
   isSelected: boolean;
   onMouseDown: (e: React.MouseEvent, id: string) => void;
+  onContextMenu: (e: React.MouseEvent, id: string) => void;
   onPortMouseDown: (e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => void;
 }
 
-const NodeComponent: React.FC<NodeComponentProps> = ({ node, isSelected, onMouseDown, onPortMouseDown }) => {
+const NodeComponent: React.FC<NodeComponentProps> = ({ node, isSelected, onMouseDown, onContextMenu, onPortMouseDown }) => {
   const { type, data } = node;
 
   let Icon = FileCode;
@@ -37,6 +38,16 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, isSelected, onMouse
       Icon = Terminal;
       colorClass = "border-pink-500 bg-gray-800";
       titleColor = "text-pink-400";
+      break;
+    case NodeType.PYTHON_EXEC:
+      Icon = Binary;
+      colorClass = "border-yellow-600 bg-gray-800";
+      titleColor = "text-yellow-500";
+      break;
+    case NodeType.TODO_LIST:
+      Icon = ListTodo;
+      colorClass = "border-teal-500 bg-gray-800";
+      titleColor = "text-teal-400";
       break;
     case NodeType.VS_CODE:
       Icon = Laptop;
@@ -74,6 +85,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, isSelected, onMouse
         boxSizing: 'border-box' // Critical for correct port positioning relative to borders
       }}
       onMouseDown={(e) => onMouseDown(e, node.id)}
+      onContextMenu={(e) => onContextMenu(e, node.id)}
     >
       {/* Input Port */}
       {type !== NodeType.TRIGGER && type !== NodeType.NOTE && (
@@ -100,7 +112,21 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, isSelected, onMouse
         {/* Preview content */}
         {!isNote && (
           <div className="text-xs text-gray-400 line-clamp-3 font-mono bg-black/20 p-2 rounded">
-            {type === NodeType.VS_CODE ? (data.prompt ? `Opening: ${data.prompt}` : "No path set") : (data.prompt || "No configuration...")}
+            {type === NodeType.VS_CODE ? (
+                <>
+                  <div className="mb-1">{data.prompt ? `Opening: ${data.prompt}` : "No path set"}</div>
+                  {data.todo && <div className="text-blue-300 opacity-70 border-t border-gray-700 mt-1 pt-1 italic">{data.todo.slice(0, 50)}...</div>}
+                </>
+            ) : type === NodeType.PYTHON_EXEC ? (
+                <div className="text-yellow-300/80">
+                    <div>Executes incoming code.</div>
+                    {data.dependencies && <div className="text-[10px] opacity-70 mt-1">Deps: {data.dependencies}</div>}
+                </div>
+            ) : type === NodeType.TODO_LIST ? (
+                <div className="text-teal-300/80 whitespace-pre-wrap">{data.todo || "Add tasks..."}</div>
+            ) : (
+                data.prompt || "No configuration..."
+            )}
           </div>
         )}
         {isNote && (

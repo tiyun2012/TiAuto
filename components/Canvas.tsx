@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Node, Edge, NodeType } from '../types';
 import NodeComponent from './NodeComponent';
 import { getPortPosition } from '../constants';
-import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote } from 'lucide-react';
+import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary } from 'lucide-react';
 
 interface CanvasProps {
   nodes: Node[];
@@ -12,6 +12,8 @@ interface CanvasProps {
   onSelectNode: (nodeId: string | null) => void;
   selectedNodeId: string | null;
   addNode: (type: NodeType, position: { x: number; y: number }) => void;
+  onDeleteNode: (id: string) => void;
+  onDeleteEdge: (id: string) => void;
 }
 
 // Node definitions for the picker
@@ -19,13 +21,20 @@ const NODE_OPTIONS = [
   { type: NodeType.TRIGGER, label: 'Trigger', icon: Play, desc: 'Start workflow', color: 'text-green-400' },
   { type: NodeType.GEMINI_GENERATE, label: 'AI Generator', icon: FileCode, desc: 'Write code', color: 'text-purple-400' },
   { type: NodeType.GEMINI_CHECK, label: 'AI Security', icon: ShieldCheck, desc: 'Audit code', color: 'text-orange-400' },
-  { type: NodeType.SIMULATE_RUN, label: 'Simulator', icon: Terminal, desc: 'Run code', color: 'text-pink-400' },
+  { type: NodeType.SIMULATE_RUN, label: 'Simulator', icon: Terminal, desc: 'AI Simulated Run', color: 'text-pink-400' },
+  { type: NodeType.PYTHON_EXEC, label: 'Python Runner', icon: Binary, desc: 'Executes Python in Browser', color: 'text-yellow-400' },
+  { type: NodeType.TODO_LIST, label: 'Task List', icon: ListTodo, desc: 'Manual checklist', color: 'text-teal-400' },
   { type: NodeType.VS_CODE, label: 'VS Code', icon: Laptop, desc: 'Open local editor', color: 'text-blue-400' },
   { type: NodeType.NOTE, label: 'Note', icon: StickyNote, desc: 'Add comments', color: 'text-yellow-400' },
 ];
 
+type ContextMenuType = 
+  | { type: 'picker'; x: number; y: number }
+  | { type: 'node'; id: string; x: number; y: number }
+  | { type: 'edge'; id: string; x: number; y: number };
+
 const Canvas: React.FC<CanvasProps> = ({ 
-  nodes, edges, onNodesChange, onEdgesChange, onSelectNode, selectedNodeId, addNode 
+  nodes, edges, onNodesChange, onEdgesChange, onSelectNode, selectedNodeId, addNode, onDeleteNode, onDeleteEdge 
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   
@@ -34,8 +43,11 @@ const Canvas: React.FC<CanvasProps> = ({
   const [isPanning, setIsPanning] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
 
+  // Selection
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
   // Context Menu State
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuType | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
 
   // Node Dragging State
@@ -45,6 +57,26 @@ const Canvas: React.FC<CanvasProps> = ({
   // Connection Dragging State
   const [connectionStart, setConnectionStart] = useState<{ nodeId: string, type: 'source' | 'target' } | null>(null);
   const [dragEdgeEnd, setDragEdgeEnd] = useState({ x: 0, y: 0 }); // World coordinates for edge tip
+
+  // --- Keyboard Shortcuts (Delete) ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        // Prevent delete if typing in an input
+        const activeTag = document.activeElement?.tagName.toLowerCase();
+        if (activeTag === 'input' || activeTag === 'textarea') return;
+
+        if (selectedNodeId) {
+            onDeleteNode(selectedNodeId);
+        } else if (selectedEdgeId) {
+            onDeleteEdge(selectedEdgeId);
+            setSelectedEdgeId(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNodeId, selectedEdgeId, onDeleteNode, onDeleteEdge]);
 
   // --- Helper: Screen (Client) to World Coordinates ---
   const screenToWorld = (clientX: number, clientY: number) => {
@@ -65,7 +97,6 @@ const Canvas: React.FC<CanvasProps> = ({
     const delta = -e.deltaY * zoomSensitivity;
     const newZoom = Math.max(0.1, Math.min(3, view.zoom + delta));
 
-    // Zoom towards mouse pointer
     if (canvasRef.current) {
         const rect = canvasRef.current.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
@@ -83,13 +114,11 @@ const Canvas: React.FC<CanvasProps> = ({
 
   // --- Pan Handling ---
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Close context menu on click
     if (contextMenu) {
         setContextMenu(null);
         setPickerSearch('');
     }
 
-    // Middle Mouse (button 1) or Space + Left Click (button 0)
     if (e.button === 1 || (e.button === 0 && e.shiftKey) || (e.button === 0 && e.altKey)) { 
         e.preventDefault();
         setIsPanning(true);
@@ -98,32 +127,43 @@ const Canvas: React.FC<CanvasProps> = ({
         // Deselect if clicking on empty canvas
         if(e.target === canvasRef.current || (e.target as HTMLElement).tagName === 'svg') {
              onSelectNode(null);
+             setSelectedEdgeId(null);
         }
     }
   };
 
-  // --- Context Menu Handling ---
-  const handleContextMenu = (e: React.MouseEvent) => {
+  // --- Context Menus ---
+  const handleCanvasContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     if (isPanning || isDraggingNode) return;
-    
-    // Only open on empty space
     if (e.target === canvasRef.current || (e.target as HTMLElement).tagName === 'svg') {
-         setContextMenu({ x: e.clientX, y: e.clientY });
+         setContextMenu({ type: 'picker', x: e.clientX, y: e.clientY });
          setPickerSearch('');
     }
   };
 
+  const handleNodeContextMenu = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ type: 'node', id, x: e.clientX, y: e.clientY });
+  };
+
+  const handleEdgeContextMenu = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ type: 'edge', id, x: e.clientX, y: e.clientY });
+    setSelectedEdgeId(id);
+  };
+
   const handleAddFromPicker = (type: NodeType) => {
-      if (!contextMenu) return;
+      if (!contextMenu || contextMenu.type !== 'picker') return;
       const worldPos = screenToWorld(contextMenu.x, contextMenu.y);
-      // Center the node visually around the click
       addNode(type, { x: worldPos.x - 100, y: worldPos.y - 20 });
       setContextMenu(null);
       setPickerSearch('');
   };
 
-  // --- Node Drag Start ---
+  // --- Interactions ---
   const handleNodeMouseDown = (e: React.MouseEvent, id: string) => {
     if (e.shiftKey || e.altKey || e.button === 1) return;
     if (contextMenu) setContextMenu(null);
@@ -141,19 +181,36 @@ const Canvas: React.FC<CanvasProps> = ({
     
     setIsDraggingNode(id);
     onSelectNode(id);
+    setSelectedEdgeId(null);
   };
 
-  // --- Port Drag Start ---
   const handlePortMouseDown = (e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => {
     e.stopPropagation();
+    const worldPos = screenToWorld(e.clientX, e.clientY);
+
     if (type === 'source') {
-        const worldPos = screenToWorld(e.clientX, e.clientY);
+        // Start a new connection from source
         setDragEdgeEnd(worldPos);
         setConnectionStart({ nodeId, type });
+        setSelectedEdgeId(null);
+    } else {
+        // Handle Input (Target) Port interactions
+        // Check if there is an existing connection to this input
+        const existingEdge = edges.find(edge => edge.target === nodeId);
+        
+        if (existingEdge) {
+            // "Rewire" logic: Detach the existing edge and hold the wire from the source
+            onDeleteEdge(existingEdge.id);
+            setConnectionStart({ nodeId: existingEdge.source, type: 'source' });
+            setDragEdgeEnd(worldPos);
+            setSelectedEdgeId(null);
+        } else {
+            // (Optional) Logic for "Reverse" connection or just no-op
+            // For now, no-op as standard behavior is source->target
+        }
     }
   };
 
-  // --- Global Move & Up Listeners ---
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
         if (isPanning) {
@@ -205,12 +262,19 @@ const Canvas: React.FC<CanvasProps> = ({
              });
 
              if (targetNode) {
-                const newEdge: Edge = {
-                    id: `e-${Date.now()}`,
-                    source: connectionStart.nodeId,
-                    target: targetNode.id
-                };
-                onEdgesChange([...edges, newEdge]);
+                // Prevent duplicate edges
+                const exists = edges.some(edge => edge.source === connectionStart.nodeId && edge.target === targetNode.id);
+                // Prevent self-loop
+                const isSelf = connectionStart.nodeId === targetNode.id;
+
+                if (!exists && !isSelf) {
+                    const newEdge: Edge = {
+                        id: `e-${Date.now()}`,
+                        source: connectionStart.nodeId,
+                        target: targetNode.id
+                    };
+                    onEdgesChange([...edges, newEdge]);
+                }
              }
              setConnectionStart(null);
         }
@@ -239,11 +303,47 @@ const Canvas: React.FC<CanvasProps> = ({
           const distX = Math.abs(end.x - start.x);
           const controlOffset = Math.max(distX * 0.5, 60);
           const path = `M ${start.x} ${start.y} C ${start.x + controlOffset} ${start.y}, ${end.x - controlOffset} ${end.y}, ${end.x} ${end.y}`;
+          const isSelected = selectedEdgeId === edge.id;
 
           return (
-            <g key={edge.id}>
-                 <path d={path} stroke="#4B5563" strokeWidth="4" fill="none" strokeLinecap="round" />
-                 <path d={path} stroke="#60A5FA" strokeWidth="2" fill="none" strokeLinecap="round" className="opacity-80" />
+            <g key={edge.id} className="pointer-events-auto group">
+                 {/* Invisible wide stroke for easier clicking */}
+                 <path 
+                    d={path} 
+                    stroke="transparent" 
+                    strokeWidth="15" 
+                    fill="none" 
+                    className="cursor-pointer"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        // Ctrl + Click to disconnect
+                        if (e.ctrlKey || e.metaKey) {
+                            onDeleteEdge(edge.id);
+                            setSelectedEdgeId(null);
+                            return;
+                        }
+                        setSelectedEdgeId(edge.id);
+                        onSelectNode(null); 
+                    }}
+                    onContextMenu={(e) => handleEdgeContextMenu(e, edge.id)}
+                 />
+                 {/* Visible wire */}
+                 <path 
+                    d={path} 
+                    stroke={isSelected ? "#FBBF24" : "#4B5563"} 
+                    strokeWidth={isSelected ? "3" : "4"} 
+                    fill="none" 
+                    strokeLinecap="round" 
+                    className="transition-colors duration-200"
+                 />
+                 <path 
+                    d={path} 
+                    stroke={isSelected ? "#FBBF24" : "#60A5FA"} 
+                    strokeWidth="2" 
+                    fill="none" 
+                    strokeLinecap="round" 
+                    className={isSelected ? "opacity-100" : "opacity-80"} 
+                 />
             </g>
           );
         })}
@@ -278,7 +378,7 @@ const Canvas: React.FC<CanvasProps> = ({
       className="relative w-full h-full bg-gray-950 overflow-hidden cursor-crosshair active:cursor-grabbing"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
-      onContextMenu={handleContextMenu}
+      onContextMenu={handleCanvasContextMenu}
       style={{
         backgroundImage: `linear-gradient(to right, #1f2937 1px, transparent 1px), linear-gradient(to bottom, #1f2937 1px, transparent 1px)`,
         backgroundSize: `${24 * view.zoom}px ${24 * view.zoom}px`,
@@ -297,61 +397,87 @@ const Canvas: React.FC<CanvasProps> = ({
                     node={node} 
                     isSelected={selectedNodeId === node.id}
                     onMouseDown={handleNodeMouseDown}
+                    onContextMenu={handleNodeContextMenu}
                     onPortMouseDown={handlePortMouseDown}
                 />
             ))}
           </div>
       </div>
 
-      {/* Context Menu / Node Picker */}
+      {/* Context Menu Renderer */}
       {contextMenu && (
           <div 
-            className="fixed z-50 w-64 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100"
+            className="fixed z-50 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
             style={{ 
-                left: Math.min(contextMenu.x, window.innerWidth - 270), 
-                top: Math.min(contextMenu.y, window.innerHeight - 300) 
+                left: Math.min(contextMenu.x, window.innerWidth - (contextMenu.type === 'picker' ? 270 : 150)), 
+                top: Math.min(contextMenu.y, window.innerHeight - (contextMenu.type === 'picker' ? 300 : 100)),
+                width: contextMenu.type === 'picker' ? '16rem' : '10rem'
             }}
           >
-              <div className="p-2 border-b border-gray-800 bg-gray-850">
-                  <div className="relative">
-                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                      <input 
-                        autoFocus
-                        type="text" 
-                        placeholder="Search nodes..." 
-                        className="w-full bg-gray-900 border border-gray-700 rounded-lg py-1.5 pl-8 pr-3 text-sm text-white focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder-gray-600"
-                        value={pickerSearch}
-                        onChange={(e) => setPickerSearch(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && filteredNodes.length > 0) {
-                                handleAddFromPicker(filteredNodes[0].type);
-                            }
-                            if (e.key === 'Escape') setContextMenu(null);
-                        }}
-                      />
-                  </div>
-              </div>
-              <div className="overflow-y-auto max-h-64 p-1">
-                  {filteredNodes.length === 0 ? (
-                      <div className="p-3 text-center text-xs text-gray-500">No nodes found</div>
-                  ) : (
-                      filteredNodes.map((opt) => (
-                          <button
-                            key={opt.type}
-                            onClick={() => handleAddFromPicker(opt.type)}
-                            className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-800 transition-colors text-left group"
-                          >
-                              <div className={`p-2 rounded-md bg-gray-800 group-hover:bg-gray-700 border border-gray-700 ${opt.color}`}>
-                                  <opt.icon className="w-4 h-4" />
-                              </div>
-                              <div>
-                                  <div className="text-sm font-medium text-gray-200">{opt.label}</div>
-                                  <div className="text-[10px] text-gray-500">{opt.desc}</div>
-                              </div>
-                          </button>
-                      ))
-                  )}
-              </div>
+              {contextMenu.type === 'picker' ? (
+                  <>
+                    <div className="p-2 border-b border-gray-800 bg-gray-850">
+                        <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                            <input 
+                                autoFocus
+                                type="text" 
+                                placeholder="Search nodes..." 
+                                className="w-full bg-gray-900 border border-gray-700 rounded-lg py-1.5 pl-8 pr-3 text-sm text-white focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder-gray-600"
+                                value={pickerSearch}
+                                onChange={(e) => setPickerSearch(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && filteredNodes.length > 0) {
+                                        handleAddFromPicker(filteredNodes[0].type);
+                                    }
+                                    if (e.key === 'Escape') setContextMenu(null);
+                                }}
+                            />
+                        </div>
+                    </div>
+                    <div className="overflow-y-auto max-h-64 p-1">
+                        {filteredNodes.length === 0 ? (
+                            <div className="p-3 text-center text-xs text-gray-500">No nodes found</div>
+                        ) : (
+                            filteredNodes.map((opt) => (
+                                <button
+                                    key={opt.type}
+                                    onClick={() => handleAddFromPicker(opt.type)}
+                                    className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-800 transition-colors text-left group"
+                                >
+                                    <div className={`p-2 rounded-md bg-gray-800 group-hover:bg-gray-700 border border-gray-700 ${opt.color}`}>
+                                        <opt.icon className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-medium text-gray-200">{opt.label}</div>
+                                        <div className="text-[10px] text-gray-500">{opt.desc}</div>
+                                    </div>
+                                </button>
+                            ))
+                        )}
+                    </div>
+                  </>
+              ) : contextMenu.type === 'node' ? (
+                <div className="p-1">
+                    <button 
+                        onClick={() => { onDeleteNode(contextMenu.id); setContextMenu(null); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-900/30 rounded-lg text-sm transition-colors"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                        Delete Node
+                    </button>
+                </div>
+              ) : (
+                <div className="p-1">
+                     <button 
+                        onClick={() => { onDeleteEdge(contextMenu.id); setContextMenu(null); setSelectedEdgeId(null); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-900/30 rounded-lg text-sm transition-colors"
+                    >
+                        <X className="w-4 h-4" />
+                        Cut Connection
+                    </button>
+                </div>
+              )}
           </div>
       )}
     </div>

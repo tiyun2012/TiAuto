@@ -1,38 +1,54 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Canvas from './components/Canvas';
 import Sidebar from './components/Sidebar';
 import PropertiesPanel from './components/PropertiesPanel';
 import { Node, Edge, INITIAL_NODES, INITIAL_EDGES, NodeType } from './types';
 import { executeNode } from './services/workflowEngine';
-import { Box, Code2, MousePointer2, Move, ZoomIn } from 'lucide-react';
+import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function App() {
   const [nodes, setNodes] = useState<Node[]>(INITIAL_NODES);
   const [edges, setEdges] = useState<Edge[]>(INITIAL_EDGES);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   // --- Node Operations ---
 
-  const handleAddNode = (type: NodeType) => {
+  const handleAddNode = (type: NodeType, position?: { x: number; y: number }) => {
     const id = `${type.toLowerCase()}-${Date.now()}`;
-    // Simple grid placement logic or center of screen
+    // Use provided position or random near center
+    const pos = position || { x: 300 + Math.random() * 50, y: 300 + Math.random() * 50 };
+    
     const newNode: Node = {
       id,
       type,
-      position: { x: 300 + Math.random() * 50, y: 300 + Math.random() * 50 },
+      position: pos,
       data: {
         label: type === NodeType.GEMINI_GENERATE ? 'AI Generate' : 
                type === NodeType.GEMINI_CHECK ? 'AI Check' : 
                type === NodeType.SIMULATE_RUN ? 'Run Simulation' : 
-               type === NodeType.VS_CODE ? 'Open VS Code' : 'Note',
+               type === NodeType.PYTHON_EXEC ? 'Python Runner' :
+               type === NodeType.VS_CODE ? 'Open VS Code' : 
+               type === NodeType.TODO_LIST ? 'Task List' :
+               type === NodeType.TRIGGER ? 'Manual Trigger' : 'Note',
         status: 'idle',
         prompt: type === NodeType.GEMINI_GENERATE ? 'Write code to...' :
                 type === NodeType.GEMINI_CHECK ? 'Check for security flaws.' : 
-                type === NodeType.VS_CODE ? '' : ''
+                type === NodeType.VS_CODE ? '' : '',
+        todo: type === NodeType.TODO_LIST ? '- [ ] New Task' : '',
+        dependencies: ''
       }
     };
-    setNodes([...nodes, newNode]);
+    setNodes(prev => [...prev, newNode]);
     setSelectedNodeId(id);
   };
 
@@ -46,32 +62,47 @@ export default function App() {
     if (selectedNodeId === id) setSelectedNodeId(null);
   };
 
+  const handleDeleteEdge = (id: string) => {
+      setEdges(prev => prev.filter(e => e.id !== id));
+  };
+
   // --- Execution Engine ---
 
   const handleRunWorkflow = async () => {
     if (isExecuting) return;
+    
+    console.log("Starting workflow...");
     setIsExecuting(true);
+    setToast({ message: "Workflow Started...", type: "info" });
 
     // Reset statuses
-    setNodes(prev => prev.map(n => ({ 
+    // Create a local copy of nodes to track state updates synchronously during execution loop
+    let currentNodes = nodes.map(n => ({ 
         ...n, 
         data: { ...n.data, status: 'idle', output: undefined, errorMessage: undefined } 
-    })));
+    })) as Node[];
+
+    // Sync UI with initial reset state
+    setNodes(currentNodes);
 
     try {
       // 1. Identify start nodes (triggers)
-      const startNodes = nodes.filter(n => n.type === NodeType.TRIGGER);
-      if (startNodes.length === 0) throw new Error("No Start Trigger found.");
+      const startNodes = currentNodes.filter(n => n.type === NodeType.TRIGGER);
+      if (startNodes.length === 0) throw new Error("No Start Trigger found. Add a Trigger node.");
 
       // 2. Simple Topological Execution (BFS)
-      // For a real engine, we'd do a topological sort. 
-      // Here, we use a queue to process nodes level by level.
       const queue = [...startNodes];
       const visited = new Set<string>();
       const executed = new Set<string>();
+      let executedCount = 0;
 
       while (queue.length > 0) {
-        const currentNode = queue.shift()!;
+        const currentNodeRef = queue.shift()!;
+        
+        // Always fetch the freshest version of the node from our local state
+        const currentNode = currentNodes.find(n => n.id === currentNodeRef.id);
+        if (!currentNode) continue;
+
         if (executed.has(currentNode.id)) continue;
 
         // Check if all parents have executed
@@ -84,23 +115,26 @@ export default function App() {
         if (!allParentsExecuted && parents.length > 0) {
             // Re-queue to end if waiting for dependencies
             queue.push(currentNode);
-            // Safety break for cycles could be added here
             continue; 
         }
 
-        // Execute current node
-        // We pass a state setter wrapper to allow the service to update React state
-        await executeNode(currentNode, nodes, edges, (id, data) => {
+        // Execute current node using the LOCAL currentNodes array (which contains outputs from previous steps)
+        await executeNode(currentNode, currentNodes, edges, (id, data) => {
+           // Update Local State (Logic)
+           currentNodes = currentNodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n);
+           
+           // Update UI State (Visual)
            setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n));
         });
         
         executed.add(currentNode.id);
         visited.add(currentNode.id);
+        executedCount++;
 
         // Add children to queue
         const childrenEdges = edges.filter(e => e.source === currentNode.id);
         childrenEdges.forEach(e => {
-            const childNode = nodes.find(n => n.id === e.target);
+            const childNode = currentNodes.find(n => n.id === e.target);
             if (childNode && !visited.has(childNode.id)) {
                 queue.push(childNode);
             }
@@ -110,9 +144,11 @@ export default function App() {
         await new Promise(r => setTimeout(r, 600));
       }
 
+      setToast({ message: `Workflow Completed. (${executedCount} nodes run)`, type: "success" });
+
     } catch (error: any) {
       console.error("Workflow halted:", error);
-      alert("Workflow Error: " + error.message);
+      setToast({ message: error.message || "Workflow Failed", type: "error" });
     } finally {
       setIsExecuting(false);
     }
@@ -158,6 +194,8 @@ export default function App() {
                 onSelectNode={setSelectedNodeId}
                 selectedNodeId={selectedNodeId}
                 addNode={handleAddNode}
+                onDeleteNode={handleDeleteNode}
+                onDeleteEdge={handleDeleteEdge}
                 />
                 
                 {/* Empty State Helper */}
@@ -165,7 +203,7 @@ export default function App() {
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="text-gray-700 text-center">
                             <Code2 className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                            <p className="text-lg font-medium">Drag nodes from the sidebar to start</p>
+                            <p className="text-lg font-medium">Right-click to add nodes</p>
                         </div>
                     </div>
                 )}
@@ -175,11 +213,11 @@ export default function App() {
             <div className="h-8 bg-gray-900 border-t border-gray-800 flex items-center px-4 gap-6 text-[11px] text-gray-500 select-none z-30 shrink-0">
                 <div className="flex items-center gap-1.5">
                     <MousePointer2 className="w-3 h-3 opacity-70" />
-                    <span>Select Node</span>
+                    <span>Select Node / Edge</span>
                 </div>
                  <div className="flex items-center gap-1.5">
                     <Move className="w-3 h-3 opacity-70" />
-                    <span>Pan: Shift + Drag / Middle Click</span>
+                    <span>Pan: Shift + Drag</span>
                 </div>
                  <div className="flex items-center gap-1.5">
                     <ZoomIn className="w-3 h-3 opacity-70" />
@@ -195,6 +233,20 @@ export default function App() {
             onDeleteNode={handleDeleteNode}
             onClose={() => setSelectedNodeId(null)}
           />
+        )}
+
+        {/* Toast Notification */}
+        {toast && (
+            <div className={`absolute bottom-12 right-6 px-4 py-3 rounded-lg shadow-xl border flex items-center gap-3 animate-in slide-in-from-bottom-5 duration-300 z-50 ${
+                toast.type === 'success' ? 'bg-green-900/90 border-green-700 text-green-100' :
+                toast.type === 'error' ? 'bg-red-900/90 border-red-700 text-red-100' :
+                'bg-blue-900/90 border-blue-700 text-blue-100'
+            }`}>
+                {toast.type === 'success' && <CheckCircle2 className="w-5 h-5" />}
+                {toast.type === 'error' && <AlertCircle className="w-5 h-5" />}
+                {toast.type === 'info' && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+                <span className="text-sm font-medium">{toast.message}</span>
+            </div>
         )}
       </div>
     </div>

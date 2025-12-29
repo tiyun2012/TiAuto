@@ -1,15 +1,20 @@
+
 export enum NodeType {
   TRIGGER = 'TRIGGER',
   GEMINI_GENERATE = 'GEMINI_GENERATE',
   GEMINI_CHECK = 'GEMINI_CHECK',
   SIMULATE_RUN = 'SIMULATE_RUN',
+  PYTHON_EXEC = 'PYTHON_EXEC',
   VS_CODE = 'VS_CODE',
+  TODO_LIST = 'TODO_LIST',
   NOTE = 'NOTE'
 }
 
 export interface NodeData {
   label: string;
-  prompt?: string; // For AI nodes
+  prompt?: string; // For AI nodes, or path for VS Code
+  todo?: string; // For Task Lists or Manual Instructions
+  dependencies?: string; // Comma separated list of python packages
   code?: string; // For output or static code
   systemInstruction?: string;
   model?: string;

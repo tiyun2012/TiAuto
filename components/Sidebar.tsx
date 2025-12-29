@@ -1,6 +1,6 @@
 import React from 'react';
 import { NodeType } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary } from 'lucide-react';
 
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
@@ -10,7 +10,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting }) => {
   return (
-    <div className="w-16 md:w-20 flex flex-col items-center py-4 bg-gray-900 border-r border-gray-800 z-30 h-full select-none">
+    <div className="w-16 md:w-20 flex flex-col items-center py-4 bg-gray-900 border-r border-gray-800 z-50 h-full select-none shadow-xl">
       <div className="mb-8 font-bold text-xl tracking-tighter text-blue-500">FG</div>
 
       {/* Main Run Button */}
@@ -54,6 +54,18 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
             label="Sim" 
             color="text-pink-400" 
             onClick={() => onAddNode(NodeType.SIMULATE_RUN)} 
+        />
+         <ToolButton 
+            icon={<Binary />} 
+            label="Py Run" 
+            color="text-yellow-400" 
+            onClick={() => onAddNode(NodeType.PYTHON_EXEC)} 
+        />
+        <ToolButton 
+            icon={<ListTodo />} 
+            label="Tasks" 
+            color="text-teal-400" 
+            onClick={() => onAddNode(NodeType.TODO_LIST)} 
         />
         <ToolButton 
             icon={<Laptop />} 
