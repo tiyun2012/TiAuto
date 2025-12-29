@@ -41,6 +41,7 @@ const Canvas: React.FC<CanvasProps> = ({
   // Viewport State
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 });
   const [isPanning, setIsPanning] = useState(false);
+  const [isAltZooming, setIsAltZooming] = useState(false); // New state for Alt+RMB zoom
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
 
   // Selection
@@ -88,10 +89,10 @@ const Canvas: React.FC<CanvasProps> = ({
     };
   };
 
-  // --- Zoom Handling ---
+  // --- Zoom Handling (Wheel) ---
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    if (isDraggingNode || connectionStart || contextMenu) return;
+    if (isDraggingNode || connectionStart || contextMenu || isAltZooming) return;
 
     const zoomSensitivity = 0.001;
     const delta = -e.deltaY * zoomSensitivity;
@@ -112,13 +113,22 @@ const Canvas: React.FC<CanvasProps> = ({
     }
   };
 
-  // --- Pan Handling ---
+  // --- Pan & Alt-Zoom Start ---
   const handleMouseDown = (e: React.MouseEvent) => {
     if (contextMenu) {
         setContextMenu(null);
         setPickerSearch('');
     }
 
+    // Alt + Right Click for Zooming
+    if (e.altKey && e.button === 2) {
+        e.preventDefault();
+        setIsAltZooming(true);
+        setLastMousePos({ x: e.clientX, y: e.clientY });
+        return;
+    }
+
+    // Middle Click OR Shift/Alt + Left Click for Panning
     if (e.button === 1 || (e.button === 0 && e.shiftKey) || (e.button === 0 && e.altKey)) { 
         e.preventDefault();
         setIsPanning(true);
@@ -135,7 +145,10 @@ const Canvas: React.FC<CanvasProps> = ({
   // --- Context Menus ---
   const handleCanvasContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (isPanning || isDraggingNode) return;
+    
+    // Prevent menu if we were alt-zooming or panning, or if Alt is held
+    if (isPanning || isDraggingNode || isAltZooming || e.altKey) return;
+
     if (e.target === canvasRef.current || (e.target as HTMLElement).tagName === 'svg') {
          setContextMenu({ type: 'picker', x: e.clientX, y: e.clientY });
          setPickerSearch('');
@@ -145,12 +158,14 @@ const Canvas: React.FC<CanvasProps> = ({
   const handleNodeContextMenu = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isAltZooming || e.altKey) return; // Allow zoom over nodes
     setContextMenu({ type: 'node', id, x: e.clientX, y: e.clientY });
   };
 
   const handleEdgeContextMenu = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isAltZooming || e.altKey) return;
     setContextMenu({ type: 'edge', id, x: e.clientX, y: e.clientY });
     setSelectedEdgeId(id);
   };
@@ -163,7 +178,7 @@ const Canvas: React.FC<CanvasProps> = ({
       setPickerSearch('');
   };
 
-  // --- Interactions ---
+  // --- Interactions (Drag, Pan, Zoom) ---
   const handleNodeMouseDown = (e: React.MouseEvent, id: string) => {
     if (e.shiftKey || e.altKey || e.button === 1) return;
     if (contextMenu) setContextMenu(null);
@@ -204,15 +219,13 @@ const Canvas: React.FC<CanvasProps> = ({
             setConnectionStart({ nodeId: existingEdge.source, type: 'source' });
             setDragEdgeEnd(worldPos);
             setSelectedEdgeId(null);
-        } else {
-            // (Optional) Logic for "Reverse" connection or just no-op
-            // For now, no-op as standard behavior is source->target
         }
     }
   };
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
+        // Handle Panning
         if (isPanning) {
             const dx = e.clientX - lastMousePos.x;
             const dy = e.clientY - lastMousePos.y;
@@ -221,6 +234,37 @@ const Canvas: React.FC<CanvasProps> = ({
             return;
         }
 
+        // Handle Alt+RMB Zooming
+        if (isAltZooming && canvasRef.current) {
+            const dx = e.clientX - lastMousePos.x;
+            
+            // Sensitivity: Dragging right zooms in, left zooms out
+            const sensitivity = 0.005;
+            const zoomFactor = 1 + dx * sensitivity;
+            
+            // Calculate new zoom with limits
+            const newZoom = Math.max(0.1, Math.min(3, view.zoom * zoomFactor));
+            
+            // Zoom towards the CENTER of the viewport
+            const rect = canvasRef.current.getBoundingClientRect();
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+
+            // 1. Get world coordinate of the center
+            const worldCenterX = (centerX - view.x) / view.zoom;
+            const worldCenterY = (centerY - view.y) / view.zoom;
+
+            // 2. Calculate new View Position to keep world center at screen center
+            // newViewX = screenCenter - (worldCenter * newZoom)
+            const newX = centerX - worldCenterX * newZoom;
+            const newY = centerY - worldCenterY * newZoom;
+
+            setView({ x: newX, y: newY, zoom: newZoom });
+            setLastMousePos({ x: e.clientX, y: e.clientY });
+            return;
+        }
+
+        // Handle Node Dragging
         if (isDraggingNode && canvasRef.current) {
             const rect = canvasRef.current.getBoundingClientRect();
             const worldMouseX = (e.clientX - rect.left - view.x) / view.zoom;
@@ -237,6 +281,7 @@ const Canvas: React.FC<CanvasProps> = ({
             return;
         }
 
+        // Handle Wire Dragging
         if (connectionStart && canvasRef.current) {
             const rect = canvasRef.current.getBoundingClientRect();
             const worldMouseX = (e.clientX - rect.left - view.x) / view.zoom;
@@ -247,6 +292,7 @@ const Canvas: React.FC<CanvasProps> = ({
 
     const handleMouseUp = (e: MouseEvent) => {
         if (isPanning) setIsPanning(false);
+        if (isAltZooming) setIsAltZooming(false);
         if (isDraggingNode) setIsDraggingNode(null);
 
         if (connectionStart && canvasRef.current) {
@@ -286,7 +332,7 @@ const Canvas: React.FC<CanvasProps> = ({
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isPanning, isDraggingNode, connectionStart, lastMousePos, view, nodeDragOffset, nodes, edges, onNodesChange, onEdgesChange]);
+  }, [isPanning, isAltZooming, isDraggingNode, connectionStart, lastMousePos, view, nodeDragOffset, nodes, edges, onNodesChange, onEdgesChange]);
 
 
   const renderConnections = () => {
@@ -375,7 +421,7 @@ const Canvas: React.FC<CanvasProps> = ({
   return (
     <div 
       ref={canvasRef} 
-      className="relative w-full h-full bg-gray-950 overflow-hidden cursor-crosshair active:cursor-grabbing"
+      className={`relative w-full h-full bg-gray-950 overflow-hidden cursor-crosshair ${isPanning || isAltZooming ? 'cursor-move' : ''}`}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onContextMenu={handleCanvasContextMenu}

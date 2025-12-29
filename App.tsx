@@ -221,7 +221,7 @@ export default function App() {
                 </div>
                  <div className="flex items-center gap-1.5">
                     <ZoomIn className="w-3 h-3 opacity-70" />
-                    <span>Zoom: Wheel</span>
+                    <span>Zoom: Wheel or Alt+RMB</span>
                 </div>
             </div>
         </div>
