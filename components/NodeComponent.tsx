@@ -1,6 +1,6 @@
 import React from 'react';
 import { Node, NodeType } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu } from 'lucide-react';
 import { NODE_WIDTH, NODE_PORT_OFFSET_Y } from '../constants';
 
 interface NodeComponentProps {
@@ -17,6 +17,11 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, isSelected, onMouse
   let Icon = FileCode;
   let colorClass = "border-blue-500 bg-gray-800";
   let titleColor = "text-blue-400";
+
+  // Categorize
+  const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN].includes(type);
+  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST].includes(type);
+  const isNote = type === NodeType.NOTE;
 
   switch (type) {
     case NodeType.TRIGGER:
@@ -60,8 +65,6 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, isSelected, onMouse
       titleColor = "text-yellow-800";
       break;
   }
-
-  const isNote = type === NodeType.NOTE;
   
   const baseClasses = `absolute rounded-lg shadow-lg border-2 transition-shadow duration-200 cursor-move ${
     isSelected ? 'ring-2 ring-white/50 z-20' : 'z-10'
@@ -100,11 +103,25 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, isSelected, onMouse
       {/* Node Body */}
       <div className={`p-3 ${isNote ? '' : 'text-gray-100'}`}>
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Icon className={`w-5 h-5 ${isNote ? titleColor : titleColor}`} />
-            <span className={`font-bold text-sm ${isNote ? 'text-yellow-900' : 'text-gray-100'}`}>{data.label}</span>
+          <div className="flex items-center gap-2 overflow-hidden">
+            <Icon className={`w-5 h-5 flex-shrink-0 ${isNote ? titleColor : titleColor}`} />
+            <span className={`font-bold text-sm truncate ${isNote ? 'text-yellow-900' : 'text-gray-100'}`}>{data.label}</span>
           </div>
-          <div className="flex items-center">
+          
+          <div className="flex items-center gap-2 pl-2 flex-shrink-0">
+             {/* Category Badges */}
+             {!isNote && isAI && (
+                 <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-[9px] text-purple-300 font-medium uppercase tracking-wider">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    <span>AI</span>
+                 </div>
+             )}
+             {!isNote && isLogic && (
+                 <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gray-700/50 border border-gray-600/50 text-[9px] text-gray-400 font-medium uppercase tracking-wider">
+                    <Cpu className="w-2.5 h-2.5" />
+                    <span>Logic</span>
+                 </div>
+             )}
             {renderStatus()}
           </div>
         </div>

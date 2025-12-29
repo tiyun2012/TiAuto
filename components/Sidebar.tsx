@@ -1,6 +1,6 @@
 import React from 'react';
 import { NodeType } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu } from 'lucide-react';
 
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
@@ -98,6 +98,9 @@ const ToolButton = ({ icon, label, onClick, color, type }: { icon: any, label: s
         e.dataTransfer.effectAllowed = 'move';
     };
 
+    const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN].includes(type);
+    const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST].includes(type);
+
     return (
         <div 
             className="group relative flex flex-col items-center gap-1 cursor-grab active:cursor-grabbing" 
@@ -105,8 +108,12 @@ const ToolButton = ({ icon, label, onClick, color, type }: { icon: any, label: s
             draggable
             onDragStart={handleDragStart}
         >
-            <div className={`p-3 rounded-xl bg-gray-800 border border-gray-700 hover:border-gray-500 hover:bg-gray-750 transition-all group-hover:-translate-y-1`}>
+            <div className={`relative p-3 rounded-xl bg-gray-800 border border-gray-700 hover:border-gray-500 hover:bg-gray-750 transition-all group-hover:-translate-y-1`}>
                 {React.cloneElement(icon, { className: `w-6 h-6 ${color}` })}
+                
+                {/* Type Indicator Dot */}
+                {isAI && <div className="absolute -top-1 -right-1 bg-gray-900 rounded-full p-0.5 border border-gray-700"><Sparkles className="w-2.5 h-2.5 text-purple-400" /></div>}
+                {isLogic && <div className="absolute -top-1 -right-1 bg-gray-900 rounded-full p-0.5 border border-gray-700"><Cpu className="w-2.5 h-2.5 text-gray-400" /></div>}
             </div>
             <span className="text-[10px] font-medium text-gray-500 group-hover:text-gray-300">{label}</span>
             
