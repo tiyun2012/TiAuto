@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Node, Edge, NodeType } from '../types';
+import { Node, Edge, NodeType, NodeShape } from '../types';
 import NodeComponent from './NodeComponent';
 import { getPortPosition } from '../constants';
 import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary } from 'lucide-react';
@@ -56,14 +56,13 @@ const Canvas: React.FC<CanvasProps> = ({
   const [nodeDragOffset, setNodeDragOffset] = useState({ x: 0, y: 0 });
 
   // Connection Dragging State
-  const [connectionStart, setConnectionStart] = useState<{ nodeId: string, type: 'source' | 'target' } | null>(null);
+  const [connectionStart, setConnectionStart] = useState<{ nodeId: string, handle: string } | null>(null);
   const [dragEdgeEnd, setDragEdgeEnd] = useState({ x: 0, y: 0 }); // World coordinates for edge tip
 
   // --- Keyboard Shortcuts (Delete) ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        // Prevent delete if typing in an input
         const activeTag = document.activeElement?.tagName.toLowerCase();
         if (activeTag === 'input' || activeTag === 'textarea') return;
 
@@ -115,13 +114,11 @@ const Canvas: React.FC<CanvasProps> = ({
 
   // --- Pan & Alt-Zoom Start ---
   const handleMouseDown = (e: React.MouseEvent) => {
-    // If clicking outside the context menu (which stops propagation), close it.
     if (contextMenu) {
         setContextMenu(null);
         setPickerSearch('');
     }
 
-    // Alt + Right Click for Zooming
     if (e.altKey && e.button === 2) {
         e.preventDefault();
         setIsAltZooming(true);
@@ -129,13 +126,11 @@ const Canvas: React.FC<CanvasProps> = ({
         return;
     }
 
-    // Middle Click OR Shift/Alt + Left Click for Panning
     if (e.button === 1 || (e.button === 0 && e.shiftKey) || (e.button === 0 && e.altKey)) { 
         e.preventDefault();
         setIsPanning(true);
         setLastMousePos({ x: e.clientX, y: e.clientY });
     } else {
-        // Deselect if clicking on empty canvas
         if(e.target === canvasRef.current || (e.target as HTMLElement).tagName === 'svg') {
              onSelectNode(null);
              setSelectedEdgeId(null);
@@ -151,22 +146,16 @@ const Canvas: React.FC<CanvasProps> = ({
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    
     const type = e.dataTransfer.getData('application/flowgen-node') as NodeType;
     if (type && Object.values(NodeType).includes(type)) {
         const worldPos = screenToWorld(e.clientX, e.clientY);
-        // Center the node (Node width is approx 256px, so offset by 128)
-        // Adjust Y slightly to center vertically on cursor
-        addNode(type, { x: worldPos.x - 128, y: worldPos.y - 30 });
+        addNode(type, { x: worldPos.x - 128, y: worldPos.y - 60 });
     }
   };
-
 
   // --- Context Menus ---
   const handleCanvasContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    
-    // Prevent menu if we were alt-zooming or panning, or if Alt is held
     if (isPanning || isDraggingNode || isAltZooming || e.altKey) return;
 
     if (e.target === canvasRef.current || (e.target as HTMLElement).tagName === 'svg') {
@@ -178,7 +167,7 @@ const Canvas: React.FC<CanvasProps> = ({
   const handleNodeContextMenu = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (isAltZooming || e.altKey) return; // Allow zoom over nodes
+    if (isAltZooming || e.altKey) return;
     setContextMenu({ type: 'node', id, x: e.clientX, y: e.clientY });
   };
 
@@ -204,6 +193,7 @@ const Canvas: React.FC<CanvasProps> = ({
     if (contextMenu) setContextMenu(null);
 
     e.stopPropagation();
+    e.preventDefault(); // Stop text selection
     const node = nodes.find(n => n.id === id);
     if (!node) return;
     
@@ -219,27 +209,47 @@ const Canvas: React.FC<CanvasProps> = ({
     setSelectedEdgeId(null);
   };
 
-  const handlePortMouseDown = (e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => {
+  // Start wire drag from a port
+  const handlePortMouseDown = (e: React.MouseEvent, nodeId: string, handle: string) => {
     e.stopPropagation();
+    e.preventDefault(); // Stop selection
     const worldPos = screenToWorld(e.clientX, e.clientY);
 
-    if (type === 'source') {
-        // Start a new connection from source
-        setDragEdgeEnd(worldPos);
-        setConnectionStart({ nodeId, type });
-        setSelectedEdgeId(null);
-    } else {
-        // Handle Input (Target) Port interactions
-        // Check if there is an existing connection to this input
-        const existingEdge = edges.find(edge => edge.target === nodeId);
-        
-        if (existingEdge) {
-            // "Rewire" logic: Detach the existing edge and hold the wire from the source
-            onDeleteEdge(existingEdge.id);
-            setConnectionStart({ nodeId: existingEdge.source, type: 'source' });
-            setDragEdgeEnd(worldPos);
-            setSelectedEdgeId(null);
+    setDragEdgeEnd(worldPos);
+    setConnectionStart({ nodeId, handle });
+    setSelectedEdgeId(null);
+  };
+
+  // Finish wire drag on a port
+  const handlePortMouseUp = (e: React.MouseEvent, nodeId: string, handle: string) => {
+    e.stopPropagation();
+    
+    if (connectionStart) {
+        if (connectionStart.nodeId === nodeId) {
+            setConnectionStart(null);
+            return; // Cannot connect to self
         }
+
+        // Check if edge already exists
+        const exists = edges.some(
+            edge => edge.source === connectionStart.nodeId && 
+                    edge.sourceHandle === connectionStart.handle &&
+                    edge.target === nodeId && 
+                    edge.targetHandle === handle
+        );
+
+        if (!exists) {
+            const newEdge: Edge = {
+                id: `e-${Date.now()}`,
+                source: connectionStart.nodeId,
+                sourceHandle: connectionStart.handle,
+                target: nodeId,
+                targetHandle: handle
+            };
+            onEdgesChange([...edges, newEdge]);
+        }
+        
+        setConnectionStart(null);
     }
   };
 
@@ -257,28 +267,16 @@ const Canvas: React.FC<CanvasProps> = ({
         // Handle Alt+RMB Zooming
         if (isAltZooming && canvasRef.current) {
             const dx = e.clientX - lastMousePos.x;
-            
-            // Sensitivity: Dragging right zooms in, left zooms out
             const sensitivity = 0.005;
             const zoomFactor = 1 + dx * sensitivity;
-            
-            // Calculate new zoom with limits
             const newZoom = Math.max(0.1, Math.min(3, view.zoom * zoomFactor));
-            
-            // Zoom towards the CENTER of the viewport
             const rect = canvasRef.current.getBoundingClientRect();
             const centerX = rect.width / 2;
             const centerY = rect.height / 2;
-
-            // 1. Get world coordinate of the center
             const worldCenterX = (centerX - view.x) / view.zoom;
             const worldCenterY = (centerY - view.y) / view.zoom;
-
-            // 2. Calculate new View Position to keep world center at screen center
-            // newViewX = screenCenter - (worldCenter * newZoom)
             const newX = centerX - worldCenterX * newZoom;
             const newY = centerY - worldCenterY * newZoom;
-
             setView({ x: newX, y: newY, zoom: newZoom });
             setLastMousePos({ x: e.clientX, y: e.clientY });
             return;
@@ -315,33 +313,8 @@ const Canvas: React.FC<CanvasProps> = ({
         if (isAltZooming) setIsAltZooming(false);
         if (isDraggingNode) setIsDraggingNode(null);
 
-        if (connectionStart && canvasRef.current) {
-             const rect = canvasRef.current.getBoundingClientRect();
-             const worldMouseX = (e.clientX - rect.left - view.x) / view.zoom;
-             const worldMouseY = (e.clientY - rect.top - view.y) / view.zoom;
-
-             const targetNode = nodes.find(n => {
-                if (n.id === connectionStart.nodeId) return false;
-                const portPos = getPortPosition(n.position.x, n.position.y, 'target');
-                const dist = Math.sqrt(Math.pow(worldMouseX - portPos.x, 2) + Math.pow(worldMouseY - portPos.y, 2));
-                return dist < 40; 
-             });
-
-             if (targetNode) {
-                // Prevent duplicate edges
-                const exists = edges.some(edge => edge.source === connectionStart.nodeId && edge.target === targetNode.id);
-                // Prevent self-loop
-                const isSelf = connectionStart.nodeId === targetNode.id;
-
-                if (!exists && !isSelf) {
-                    const newEdge: Edge = {
-                        id: `e-${Date.now()}`,
-                        source: connectionStart.nodeId,
-                        target: targetNode.id
-                    };
-                    onEdgesChange([...edges, newEdge]);
-                }
-             }
+        // If we release mouse NOT over a port (handled by onPortMouseUp), cancel connection
+        if (connectionStart) {
              setConnectionStart(null);
         }
     };
@@ -363,12 +336,30 @@ const Canvas: React.FC<CanvasProps> = ({
           const target = nodes.find(n => n.id === edge.target);
           if (!source || !target) return null;
 
-          const start = getPortPosition(source.position.x, source.position.y, 'source');
-          const end = getPortPosition(target.position.x, target.position.y, 'target');
+          // Default handles for backward compatibility
+          const sHandle = edge.sourceHandle || 'right';
+          const tHandle = edge.targetHandle || 'left';
 
-          const distX = Math.abs(end.x - start.x);
-          const controlOffset = Math.max(distX * 0.5, 60);
-          const path = `M ${start.x} ${start.y} C ${start.x + controlOffset} ${start.y}, ${end.x - controlOffset} ${end.y}, ${end.x} ${end.y}`;
+          const start = getPortPosition(source.position.x, source.position.y, source.data.shape, sHandle);
+          const end = getPortPosition(target.position.x, target.position.y, target.data.shape, tHandle);
+
+          // Control points depend on direction
+          let c1x = start.x, c1y = start.y, c2x = end.x, c2y = end.y;
+          const dist = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
+          const offset = Math.min(dist * 0.5, 100);
+
+          // Simple heuristic for control points based on handle side
+          if (sHandle === 'left') c1x -= offset;
+          else if (sHandle === 'right') c1x += offset;
+          else if (sHandle === 'top') c1y -= offset;
+          else if (sHandle === 'bottom') c1y += offset;
+
+          if (tHandle === 'left') c2x -= offset;
+          else if (tHandle === 'right') c2x += offset;
+          else if (tHandle === 'top') c2y -= offset;
+          else if (tHandle === 'bottom') c2y += offset;
+
+          const path = `M ${start.x} ${start.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${end.x} ${end.y}`;
           const isSelected = selectedEdgeId === edge.id;
 
           return (
@@ -418,14 +409,21 @@ const Canvas: React.FC<CanvasProps> = ({
             const source = nodes.find(n => n.id === connectionStart.nodeId);
             if (!source) return null;
             
-            const start = getPortPosition(source.position.x, source.position.y, connectionStart.type);
+            const start = getPortPosition(source.position.x, source.position.y, source.data.shape, connectionStart.handle);
             const endX = dragEdgeEnd.x;
             const endY = dragEdgeEnd.y;
             
-            const distX = Math.abs(endX - start.x);
-            const controlOffset = Math.max(distX * 0.5, 60);
-            
-            const path = `M ${start.x} ${start.y} C ${start.x + controlOffset} ${start.y}, ${endX - controlOffset} ${endY}, ${endX} ${endY}`;
+            // Logic for temporary line curve
+            // Assume we are dragging to a 'floating' point
+            // Use same offset logic for start handle
+            let c1x = start.x, c1y = start.y;
+            const offset = 50;
+             if (connectionStart.handle === 'left') c1x -= offset;
+             else if (connectionStart.handle === 'right') c1x += offset;
+             else if (connectionStart.handle === 'top') c1y -= offset;
+             else if (connectionStart.handle === 'bottom') c1y += offset;
+
+            const path = `M ${start.x} ${start.y} C ${c1x} ${c1y}, ${endX} ${endY}, ${endX} ${endY}`;
             return <path d={path} stroke="#FBBF24" strokeWidth="3" strokeDasharray="6,4" fill="none" strokeLinecap="round" />;
         })()}
       </svg>
@@ -467,6 +465,7 @@ const Canvas: React.FC<CanvasProps> = ({
                     onMouseDown={handleNodeMouseDown}
                     onContextMenu={handleNodeContextMenu}
                     onPortMouseDown={handlePortMouseDown}
+                    onPortMouseUp={handlePortMouseUp}
                 />
             ))}
           </div>

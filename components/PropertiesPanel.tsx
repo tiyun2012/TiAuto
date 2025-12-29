@@ -1,6 +1,6 @@
 import React from 'react';
-import { Node, NodeType } from '../types';
-import { X, Copy, Trash2, Maximize2 } from 'lucide-react';
+import { Node, NodeType, NodeShape } from '../types';
+import { X, Copy, Trash2, Maximize2, Square, Circle } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 interface PropertiesPanelProps {
@@ -57,15 +57,36 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide">
         
-        {/* Label Input */}
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Node Name</label>
-          <input
-            type="text"
-            value={node.data.label}
-            onChange={(e) => onUpdateNode(node.id, { label: e.target.value })}
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          />
+        {/* Label & Shape Input */}
+        <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2 space-y-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Node Name</label>
+                <input
+                    type="text"
+                    value={node.data.label}
+                    onChange={(e) => onUpdateNode(node.id, { label: e.target.value })}
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+            </div>
+            <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Shape</label>
+                <div className="flex rounded-lg bg-gray-800 border border-gray-700 p-1">
+                    <button 
+                        onClick={() => onUpdateNode(node.id, { shape: 'square' })}
+                        className={`flex-1 flex justify-center p-1 rounded ${!node.data.shape || node.data.shape === 'square' ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}
+                        title="Square"
+                    >
+                        <Square className="w-4 h-4" />
+                    </button>
+                    <button 
+                        onClick={() => onUpdateNode(node.id, { shape: 'circle' })}
+                        className={`flex-1 flex justify-center p-1 rounded ${node.data.shape === 'circle' ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}
+                         title="Circle"
+                    >
+                        <Circle className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
         </div>
 
         {/* Python Execution Specific Input */}

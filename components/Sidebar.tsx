@@ -103,7 +103,7 @@ const ToolButton = ({ icon, label, onClick, color, type }: { icon: any, label: s
 
     return (
         <div 
-            className="group relative flex flex-col items-center gap-1 cursor-grab active:cursor-grabbing" 
+            className="group relative flex flex-col items-center gap-1 cursor-grab active:cursor-grabbing select-none" 
             onClick={onClick}
             draggable
             onDragStart={handleDragStart}

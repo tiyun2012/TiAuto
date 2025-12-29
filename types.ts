@@ -10,8 +10,11 @@ export enum NodeType {
   NOTE = 'NOTE'
 }
 
+export type NodeShape = 'square' | 'circle';
+
 export interface NodeData {
   label: string;
+  shape?: NodeShape; // 'square' | 'circle'
   prompt?: string; // For AI nodes, or path for VS Code
   todo?: string; // For Task Lists or Manual Instructions
   dependencies?: string; // Comma separated list of python packages
@@ -33,7 +36,9 @@ export interface Node {
 export interface Edge {
   id: string;
   source: string;
+  sourceHandle?: string; // 'top' | 'right' | 'bottom' | 'left'
   target: string;
+  targetHandle?: string; // 'top' | 'right' | 'bottom' | 'left'
 }
 
 export interface WorkflowState {
@@ -48,7 +53,7 @@ export const INITIAL_NODES: Node[] = [
     id: 'start-1',
     type: NodeType.TRIGGER,
     position: { x: 50, y: 300 },
-    data: { label: 'Start Trigger', status: 'idle' }
+    data: { label: 'Start Trigger', status: 'idle', shape: 'circle' }
   },
   {
     id: 'gen-1',
@@ -56,6 +61,7 @@ export const INITIAL_NODES: Node[] = [
     position: { x: 300, y: 200 },
     data: { 
       label: 'Generate Python Script', 
+      shape: 'square',
       prompt: 'Write a Python script to calculate the Fibonacci sequence up to n=10.',
       status: 'idle' 
     }
@@ -66,6 +72,7 @@ export const INITIAL_NODES: Node[] = [
     position: { x: 600, y: 200 },
     data: { 
       label: 'Security Audit', 
+      shape: 'square',
       prompt: 'Analyze the code for any infinite loops or security issues.',
       status: 'idle' 
     }
@@ -73,6 +80,6 @@ export const INITIAL_NODES: Node[] = [
 ];
 
 export const INITIAL_EDGES: Edge[] = [
-  { id: 'e1', source: 'start-1', target: 'gen-1' },
-  { id: 'e2', source: 'gen-1', target: 'check-1' }
+  { id: 'e1', source: 'start-1', sourceHandle: 'right', target: 'gen-1', targetHandle: 'left' },
+  { id: 'e2', source: 'gen-1', sourceHandle: 'right', target: 'check-1', targetHandle: 'left' }
 ];
