@@ -143,6 +143,25 @@ const Canvas: React.FC<CanvasProps> = ({
     }
   };
 
+  // --- Drag and Drop Handlers (From Sidebar) ---
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    
+    const type = e.dataTransfer.getData('application/flowgen-node') as NodeType;
+    if (type && Object.values(NodeType).includes(type)) {
+        const worldPos = screenToWorld(e.clientX, e.clientY);
+        // Center the node (Node width is approx 256px, so offset by 128)
+        // Adjust Y slightly to center vertically on cursor
+        addNode(type, { x: worldPos.x - 128, y: worldPos.y - 30 });
+    }
+  };
+
+
   // --- Context Menus ---
   const handleCanvasContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -426,6 +445,8 @@ const Canvas: React.FC<CanvasProps> = ({
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onContextMenu={handleCanvasContextMenu}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
       style={{
         backgroundImage: `linear-gradient(to right, #1f2937 1px, transparent 1px), linear-gradient(to bottom, #1f2937 1px, transparent 1px)`,
         backgroundSize: `${24 * view.zoom}px ${24 * view.zoom}px`,

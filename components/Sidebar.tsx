@@ -35,67 +35,87 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
             icon={<Play />} 
             label="Trigger" 
             color="text-green-400" 
-            onClick={() => onAddNode(NodeType.TRIGGER)} 
+            onClick={() => onAddNode(NodeType.TRIGGER)}
+            type={NodeType.TRIGGER} 
         />
         <ToolButton 
             icon={<FileCode />} 
             label="Gen" 
             color="text-purple-400" 
-            onClick={() => onAddNode(NodeType.GEMINI_GENERATE)} 
+            onClick={() => onAddNode(NodeType.GEMINI_GENERATE)}
+            type={NodeType.GEMINI_GENERATE} 
         />
         <ToolButton 
             icon={<ShieldCheck />} 
             label="Check" 
             color="text-orange-400" 
-            onClick={() => onAddNode(NodeType.GEMINI_CHECK)} 
+            onClick={() => onAddNode(NodeType.GEMINI_CHECK)}
+            type={NodeType.GEMINI_CHECK} 
         />
         <ToolButton 
             icon={<Terminal />} 
             label="Sim" 
             color="text-pink-400" 
-            onClick={() => onAddNode(NodeType.SIMULATE_RUN)} 
+            onClick={() => onAddNode(NodeType.SIMULATE_RUN)}
+            type={NodeType.SIMULATE_RUN} 
         />
          <ToolButton 
             icon={<Binary />} 
             label="Py Run" 
             color="text-yellow-400" 
-            onClick={() => onAddNode(NodeType.PYTHON_EXEC)} 
+            onClick={() => onAddNode(NodeType.PYTHON_EXEC)}
+            type={NodeType.PYTHON_EXEC} 
         />
         <ToolButton 
             icon={<ListTodo />} 
             label="Tasks" 
             color="text-teal-400" 
-            onClick={() => onAddNode(NodeType.TODO_LIST)} 
+            onClick={() => onAddNode(NodeType.TODO_LIST)}
+            type={NodeType.TODO_LIST} 
         />
         <ToolButton 
             icon={<Laptop />} 
             label="VS Code" 
             color="text-blue-400" 
-            onClick={() => onAddNode(NodeType.VS_CODE)} 
+            onClick={() => onAddNode(NodeType.VS_CODE)}
+            type={NodeType.VS_CODE} 
         />
         <ToolButton 
             icon={<StickyNote />} 
             label="Note" 
             color="text-yellow-400" 
-            onClick={() => onAddNode(NodeType.NOTE)} 
+            onClick={() => onAddNode(NodeType.NOTE)}
+            type={NodeType.NOTE} 
         />
       </div>
     </div>
   );
 };
 
-const ToolButton = ({ icon, label, onClick, color }: any) => (
-    <div className="group relative flex flex-col items-center gap-1 cursor-pointer" onClick={onClick}>
-        <div className={`p-3 rounded-xl bg-gray-800 border border-gray-700 hover:border-gray-500 hover:bg-gray-750 transition-all group-hover:-translate-y-1`}>
-            {React.cloneElement(icon, { className: `w-6 h-6 ${color}` })}
+const ToolButton = ({ icon, label, onClick, color, type }: { icon: any, label: string, onClick: () => void, color: string, type: NodeType }) => {
+    const handleDragStart = (e: React.DragEvent) => {
+        e.dataTransfer.setData('application/flowgen-node', type);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    return (
+        <div 
+            className="group relative flex flex-col items-center gap-1 cursor-grab active:cursor-grabbing" 
+            onClick={onClick}
+            draggable
+            onDragStart={handleDragStart}
+        >
+            <div className={`p-3 rounded-xl bg-gray-800 border border-gray-700 hover:border-gray-500 hover:bg-gray-750 transition-all group-hover:-translate-y-1`}>
+                {React.cloneElement(icon, { className: `w-6 h-6 ${color}` })}
+            </div>
+            <span className="text-[10px] font-medium text-gray-500 group-hover:text-gray-300">{label}</span>
+            
+            {/* Tooltip */}
+            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-white opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">
+                Add {label} Node
+            </div>
         </div>
-        <span className="text-[10px] font-medium text-gray-500 group-hover:text-gray-300">{label}</span>
-        
-        {/* Tooltip */}
-        <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-white opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">
-            Add {label} Node
-        </div>
-    </div>
-);
+    );
+};
 
 export default Sidebar;
