@@ -1,0 +1,5 @@
+{
+  "name": "FlowGen AI",
+  "description": "A modular, visual automation platform for generating, checking, and testing code using Gemini AI workflows.",
+  "requestFramePermissions": []
+}
