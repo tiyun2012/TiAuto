@@ -115,6 +115,7 @@ const Canvas: React.FC<CanvasProps> = ({
 
   // --- Pan & Alt-Zoom Start ---
   const handleMouseDown = (e: React.MouseEvent) => {
+    // If clicking outside the context menu (which stops propagation), close it.
     if (contextMenu) {
         setContextMenu(null);
         setPickerSearch('');
@@ -459,6 +460,8 @@ const Canvas: React.FC<CanvasProps> = ({
                 top: Math.min(contextMenu.y, window.innerHeight - (contextMenu.type === 'picker' ? 300 : 100)),
                 width: contextMenu.type === 'picker' ? '16rem' : '10rem'
             }}
+            onMouseDown={(e) => e.stopPropagation()} // Stop propagation so canvas doesn't auto-close
+            onWheel={(e) => e.stopPropagation()} // Stop propagation so canvas doesn't zoom while scrolling
           >
               {contextMenu.type === 'picker' ? (
                   <>
