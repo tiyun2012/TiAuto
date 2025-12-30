@@ -100,15 +100,18 @@ const runWithFallback = async (
 
 // --- UNIFIED SERVICE EXPORTS ---
 
-export const generateCode = async (prompt: string, systemInstruction: string, settings: AISettings): Promise<string> => {
+export const generateCode = async (prompt: string, systemInstruction: string, settings: AISettings, modelOverride?: string): Promise<string> => {
   const geminiTask = async () => {
     const envKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
     const apiKey = settings.geminiKey || envKey || '';
     if (!apiKey) throw new Error("Gemini API Key is missing");
     const ai = getGeminiClient(apiKey);
     
+    // Only use model override if it looks like a gemini model (starts with gemini)
+    const model = (modelOverride && modelOverride.startsWith('gemini')) ? modelOverride : GEMINI_CODE_MODEL;
+
     const response = await ai.models.generateContent({
-      model: GEMINI_CODE_MODEL,
+      model: model,
       contents: prompt,
       config: {
         systemInstruction: systemInstruction || "You are an expert software engineer. Output only the requested code or explanation. If generating multiple files, separate them clearly with '### filename.ext'.",
@@ -123,13 +126,15 @@ export const generateCode = async (prompt: string, systemInstruction: string, se
           { role: "system", content: systemInstruction },
           { role: "user", content: prompt }
       ];
-      return await callDeepSeek(settings.deepseekKey, settings.deepseekModel, messages);
+      // Only use override if it looks like a deepseek model
+      const model = (modelOverride && modelOverride.startsWith('deepseek')) ? modelOverride : settings.deepseekModel;
+      return await callDeepSeek(settings.deepseekKey, model, messages);
   };
 
   return runWithFallback(settings, deepSeekTask, geminiTask);
 };
 
-export const refineCode = async (originalCode: string, instructions: string, settings: AISettings): Promise<string> => {
+export const refineCode = async (originalCode: string, instructions: string, settings: AISettings, modelOverride?: string): Promise<string> => {
     const prompt = `
         ORIGINAL CONTENT:
         ${originalCode}
@@ -146,9 +151,11 @@ export const refineCode = async (originalCode: string, instructions: string, set
         const apiKey = settings.geminiKey || envKey || '';
         if (!apiKey) throw new Error("Gemini API Key is missing");
         const ai = getGeminiClient(apiKey);
-      
+        
+        const model = (modelOverride && modelOverride.startsWith('gemini')) ? modelOverride : GEMINI_CODE_MODEL;
+
         const response = await ai.models.generateContent({
-            model: GEMINI_CODE_MODEL,
+            model: model,
             contents: prompt,
             config: {
               systemInstruction: "You are an expert code refactorer. Output only the updated code.",
@@ -163,13 +170,14 @@ export const refineCode = async (originalCode: string, instructions: string, set
             { role: "system", content: "You are an expert code refactorer. Output only the updated code." },
             { role: "user", content: prompt }
         ];
-        return await callDeepSeek(settings.deepseekKey, settings.deepseekModel, messages);
+        const model = (modelOverride && modelOverride.startsWith('deepseek')) ? modelOverride : settings.deepseekModel;
+        return await callDeepSeek(settings.deepseekKey, model, messages);
     };
 
     return runWithFallback(settings, deepSeekTask, geminiTask);
   };
 
-export const generateUnitTests = async (context: string, instructions: string, settings: AISettings): Promise<string> => {
+export const generateUnitTests = async (context: string, instructions: string, settings: AISettings, modelOverride?: string): Promise<string> => {
     const prompt = `
       CONTEXT (Code to test):
       ${context}
@@ -190,9 +198,11 @@ export const generateUnitTests = async (context: string, instructions: string, s
         const apiKey = settings.geminiKey || envKey || '';
         if (!apiKey) throw new Error("Gemini API Key is missing");
         const ai = getGeminiClient(apiKey);
+        
+        const model = (modelOverride && modelOverride.startsWith('gemini')) ? modelOverride : GEMINI_CODE_MODEL;
 
         const response = await ai.models.generateContent({
-          model: GEMINI_CODE_MODEL,
+          model: model,
           contents: prompt,
           config: {
             systemInstruction: sysMsg,
@@ -207,13 +217,14 @@ export const generateUnitTests = async (context: string, instructions: string, s
             { role: "system", content: sysMsg },
             { role: "user", content: prompt }
         ];
-        return await callDeepSeek(settings.deepseekKey, settings.deepseekModel, messages);
+        const model = (modelOverride && modelOverride.startsWith('deepseek')) ? modelOverride : settings.deepseekModel;
+        return await callDeepSeek(settings.deepseekKey, model, messages);
     };
 
     return runWithFallback(settings, deepSeekTask, geminiTask);
 };
 
-export const checkCodeStructured = async (code: string, criteria: string, settings: AISettings): Promise<string> => {
+export const checkCodeStructured = async (code: string, criteria: string, settings: AISettings, modelOverride?: string): Promise<string> => {
     const fullPrompt = `
       CODE TO ANALYZE:
       \`\`\`
@@ -247,8 +258,10 @@ export const checkCodeStructured = async (code: string, criteria: string, settin
             }
         };
 
+        const model = (modelOverride && modelOverride.startsWith('gemini')) ? modelOverride : GEMINI_CHECK_MODEL;
+
         const response = await ai.models.generateContent({
-            model: GEMINI_CHECK_MODEL,
+            model: model,
             contents: fullPrompt,
             config: {
                 systemInstruction: "You are a senior QA engineer and security analyst. Be strict and specific. Return a raw JSON array of issues.",
@@ -265,7 +278,8 @@ export const checkCodeStructured = async (code: string, criteria: string, settin
             { role: "system", content: sysMsg },
             { role: "user", content: fullPrompt }
         ];
-        const raw = await callDeepSeek(settings.deepseekKey, settings.deepseekModel, messages, true);
+        const model = (modelOverride && modelOverride.startsWith('deepseek')) ? modelOverride : settings.deepseekModel;
+        const raw = await callDeepSeek(settings.deepseekKey, model, messages, true);
         
         // Cleanup response if DeepSeek adds markdown
         let clean = raw.trim();
@@ -284,7 +298,7 @@ export const checkCodeStructured = async (code: string, criteria: string, settin
     }
 };
 
-export const simulateExecution = async (code: string, settings: AISettings, inputs: string = ""): Promise<string> => {
+export const simulateExecution = async (code: string, settings: AISettings, inputs: string = "", modelOverride?: string): Promise<string> => {
     const fullPrompt = `
       Please act as a code interpreter. Simulate the execution of the following code.
       
@@ -305,8 +319,9 @@ export const simulateExecution = async (code: string, settings: AISettings, inpu
         const apiKey = settings.geminiKey || envKey || '';
         if (!apiKey) throw new Error("Gemini API Key is missing");
         const ai = getGeminiClient(apiKey);
+        const model = (modelOverride && modelOverride.startsWith('gemini')) ? modelOverride : GEMINI_CODE_MODEL;
         const response = await ai.models.generateContent({
-            model: GEMINI_CODE_MODEL,
+            model: model,
             contents: fullPrompt,
         });
         return response.text || "No output simulated.";
@@ -317,7 +332,8 @@ export const simulateExecution = async (code: string, settings: AISettings, inpu
             { role: "system", content: "You are a terminal emulator. Output raw logs only." },
             { role: "user", content: fullPrompt }
         ];
-        return await callDeepSeek(settings.deepseekKey, settings.deepseekModel, messages);
+        const model = (modelOverride && modelOverride.startsWith('deepseek')) ? modelOverride : settings.deepseekModel;
+        return await callDeepSeek(settings.deepseekKey, model, messages);
     };
 
     return runWithFallback(settings, deepSeekTask, geminiTask);

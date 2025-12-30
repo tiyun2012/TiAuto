@@ -60,6 +60,9 @@ export const executeNode = async (
     let result = "";
     let extractedFiles: Record<string, string> = {};
 
+    // AI Model Override from Node Data
+    const modelOverride = node.data.model;
+
     switch (node.type) {
       case NodeType.TRIGGER:
         result = "Workflow started manually.";
@@ -71,7 +74,7 @@ export const executeNode = async (
         const genPrompt = `${vfsString}\n${textContext}\n\nTask: ${node.data.prompt || 'Generate code based on previous context.'}`;
         const fileInstruction = "If creating multiple files, separate them with '### filename.ext' header.";
         
-        result = await generateCode(genPrompt, (node.data.systemInstruction || "") + " " + fileInstruction, aiSettings);
+        result = await generateCode(genPrompt, (node.data.systemInstruction || "") + " " + fileInstruction, aiSettings, modelOverride);
         extractedFiles = parseOutputToFiles(result);
         break;
 
@@ -82,7 +85,7 @@ export const executeNode = async (
         const checkCriteria = node.data.prompt || "Check for bugs and best practices.";
         const fullContext = `${vfsString}\n\n${textContext}`;
         
-        result = await checkCodeStructured(fullContext, checkCriteria, aiSettings);
+        result = await checkCodeStructured(fullContext, checkCriteria, aiSettings, modelOverride);
         break;
       
       case NodeType.AI_UNIT_TEST:
@@ -91,7 +94,7 @@ export const executeNode = async (
         }
         const testContext = `${vfsString}\n\n${textContext}`;
         const instructions = node.data.prompt || "Write unit tests for the provided code.";
-        result = await generateUnitTests(testContext, instructions, aiSettings);
+        result = await generateUnitTests(testContext, instructions, aiSettings, modelOverride);
         extractedFiles = parseOutputToFiles(result);
         break;
 
@@ -100,7 +103,7 @@ export const executeNode = async (
             throw new Error("No code found to simulate.");
          }
          const simContext = `${vfsString}\n\n${textContext}`;
-         result = await simulateExecution(simContext, aiSettings);
+         result = await simulateExecution(simContext, aiSettings, "", modelOverride);
          break;
       
       case NodeType.SHELL_EXEC:

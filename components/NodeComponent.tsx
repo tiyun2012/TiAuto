@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff, Sparkles, Bot } from 'lucide-react';
 import { NODE_DIMENSIONS } from '../constants';
 
 interface NodeComponentProps {
@@ -56,7 +56,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       portColor = "bg-green-500";
       break;
     case NodeType.GEMINI_GENERATE:
-      Icon = FileCode;
+      Icon = Sparkles; // Changed from FileCode to Sparkles for AI Gen
       bgClass = "bg-gray-800";
       borderClass = "border-purple-500";
       titleColor = "text-purple-400";
@@ -180,9 +180,16 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
     const badgeCommon = `absolute ${posClass} p-1.5 rounded-full bg-gray-900 border-2 shadow-lg z-40 flex items-center justify-center transition-transform hover:scale-110 ${borderClass} ${titleColor}`;
 
     if (isAI) {
+        // Determine Icon based on selected model
+        const model = data.model || '';
+        let AiIcon = Bot;
+        
+        if (model.includes('gemini')) AiIcon = Sparkles;
+        else if (model.includes('deepseek')) AiIcon = Brain;
+
         return (
-            <div className={badgeCommon} title="AI Powered">
-                <Brain className="w-3.5 h-3.5" />
+            <div className={badgeCommon} title={model ? `Model: ${model}` : "AI Powered"}>
+                <AiIcon className="w-3.5 h-3.5" />
             </div>
         );
     }
@@ -306,7 +313,9 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                     {/* Rectangle still uses inline badges for cleaner header layout, updated to Brain */}
                     {!isNote && isAI && (
                         <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gray-900/50 border border-gray-600/50 text-[9px] font-medium uppercase tracking-wider ${titleColor}`}>
-                            <Brain className="w-2.5 h-2.5" />
+                            {data.model?.includes('deepseek') ? <Brain className="w-2.5 h-2.5" /> : 
+                             data.model?.includes('gemini') ? <Sparkles className="w-2.5 h-2.5" /> : 
+                             <Bot className="w-2.5 h-2.5" />}
                             <span>AI</span>
                         </div>
                     )}

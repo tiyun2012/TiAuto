@@ -230,7 +230,7 @@ export default function App() {
       try {
         handleUpdateNode(id, { status: 'running' });
         
-        const refinedCode = await refineCode(node.data.output, instructions, aiSettings);
+        const refinedCode = await refineCode(node.data.output, instructions, aiSettings, node.data.model);
         const extractedFiles = parseOutputToFiles(refinedCode);
         
         handleUpdateNode(id, { 
@@ -489,6 +489,7 @@ export default function App() {
         {selectedNode && (
           <PropertiesPanel
             node={selectedNode}
+            aiSettings={aiSettings}
             onUpdateNode={handleUpdateNode}
             onDeleteNode={handleDeleteNode}
             onClose={() => setSelectedNodeId(null)}

@@ -10,6 +10,17 @@ export const NODE_DIMENSIONS = {
 
 export const NODE_BORDER_WIDTH = 2; // px
 
+export const GEMINI_MODELS = [
+  { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro (Preview)' },
+  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' },
+  { value: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash Exp' }
+];
+
+export const DEEPSEEK_MODELS = [
+  { value: 'deepseek-coder', label: 'DeepSeek Coder' },
+  { value: 'deepseek-chat', label: 'DeepSeek Chat' }
+];
+
 // Helper to get absolute port coordinates
 // This calculates the geometric point on the border where the wire should attach.
 export const getPortPosition = (

@@ -1,18 +1,20 @@
 
 import React, { useState, useEffect } from 'react';
-import { Node, NodeType, NodeShape } from '../types';
-import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2, AlertTriangle, AlertCircle, Info, CheckCircle2 } from 'lucide-react';
+import { Node, NodeType, NodeShape, AISettings } from '../types';
+import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2, AlertTriangle, AlertCircle, Info, CheckCircle2, Bot, Brain } from 'lucide-react';
 import Editor, { DiffEditor } from '@monaco-editor/react';
+import { GEMINI_MODELS, DEEPSEEK_MODELS } from '../constants';
 
 interface PropertiesPanelProps {
   node: Node | null;
+  aiSettings: AISettings;
   onUpdateNode: (id: string, data: any) => void;
   onDeleteNode: (id: string) => void;
   onClose: () => void;
-  onRefineNode?: (id: string, instructions: string) => void; // New prop for refinement
+  onRefineNode?: (id: string, instructions: string) => void;
 }
 
-const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, onDeleteNode, onClose, onRefineNode }) => {
+const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onUpdateNode, onDeleteNode, onClose, onRefineNode }) => {
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [refinementInput, setRefinementInput] = useState("");
   const [isRefining, setIsRefining] = useState(false);
@@ -61,7 +63,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
 
   const currentShape = node.data.shape || 'rectangle';
   const hasMultipleFiles = node.data.files && Object.keys(node.data.files).length > 0;
-  const isGenerative = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.AI_UNIT_TEST].includes(node.type);
+  const isGenerative = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.AI_UNIT_TEST, NodeType.SIMULATE_RUN].includes(node.type);
 
   // Helper to render structured checks
   const renderCheckResults = (output: string) => {
@@ -196,6 +198,37 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
                 </div>
             </div>
         </div>
+
+        {/* AI Model Selection (Only for Generative Nodes) */}
+        {isGenerative && (
+            <div className="space-y-2">
+                 <div className="flex items-center gap-2">
+                    <label className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                        {aiSettings.provider === 'gemini' ? <Sparkles className="w-3.5 h-3.5" /> : <Brain className="w-3.5 h-3.5" />}
+                        Model Selection
+                    </label>
+                 </div>
+                 <select 
+                    value={node.data.model || ''}
+                    onChange={(e) => onUpdateNode(node.id, { model: e.target.value })}
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                 >
+                     <option value="">Default ({aiSettings.provider === 'gemini' ? 'Gemini 3 Pro' : 'DeepSeek Coder'})</option>
+                     {aiSettings.provider === 'gemini' ? (
+                        GEMINI_MODELS.map(m => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                        ))
+                     ) : (
+                        DEEPSEEK_MODELS.map(m => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                        ))
+                     )}
+                 </select>
+                 <p className="text-[10px] text-gray-500">
+                    Specific model to use for this node.
+                 </p>
+            </div>
+        )}
 
         {/* Python Execution Specific Input */}
         {node.type === NodeType.PYTHON_EXEC && (
