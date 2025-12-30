@@ -143,6 +143,28 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
     if (data.status === 'error') return <AlertCircle className="w-4 h-4 text-red-500 bg-gray-900 rounded-full" />;
     return null;
   };
+  
+  // Corner Badge for AI/Logic (Square/Circle only)
+  const renderCornerBadge = () => {
+    if (isNote) return null;
+    const badgeCommon = "absolute -top-3 -left-3 p-1.5 rounded-full bg-gray-900 border-2 shadow-lg z-40 flex items-center justify-center";
+
+    if (isAI) {
+        return (
+            <div className={`${badgeCommon} border-purple-500/80 text-purple-400`} title="AI Powered">
+                <Sparkles className="w-3.5 h-3.5" />
+            </div>
+        );
+    }
+    if (isLogic) {
+        return (
+            <div className={`${badgeCommon} border-gray-600 text-gray-400`} title="Logic / Utility">
+                <Cpu className="w-3.5 h-3.5" />
+            </div>
+        );
+    }
+    return null;
+  };
 
   const getWidgetContent = () => {
       if (type === NodeType.VS_CODE) return data.todo || `Path: ${data.prompt}`;
@@ -163,6 +185,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
           
           return (
               <div className="relative w-full h-full">
+                 {renderCornerBadge()}
                  {/* 1. Curved Text (Label) */}
                  <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-10">
                      <path 
@@ -204,6 +227,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       if (shape === 'square') {
           return (
               <div className="relative w-full h-full">
+                  {renderCornerBadge()}
                   {/* 1. Center Icon */}
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-4">
                       <Icon className={`w-14 h-14 ${titleColor} opacity-90 transition-transform group-hover:scale-110 duration-300`} />
@@ -245,6 +269,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                 </div>
                 
                 <div className="flex items-center gap-2 pl-2 flex-shrink-0">
+                    {/* Rectangle still uses inline badges for cleaner header layout */}
                     {!isNote && isAI && (
                         <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-[9px] text-purple-300 font-medium uppercase tracking-wider">
                             <Sparkles className="w-2.5 h-2.5" />
