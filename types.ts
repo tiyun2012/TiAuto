@@ -23,7 +23,8 @@ export interface NodeData {
   systemInstruction?: string;
   model?: string;
   useAiSimulation?: boolean; // For Shell Node: Use AI to mock output if in browser
-  output?: string; // The result of execution
+  output?: string; // The raw text result
+  files?: Record<string, string>; // NEW: Structured file storage { 'filename.ext': 'content' }
   status?: 'idle' | 'running' | 'success' | 'error';
   errorMessage?: string;
 }

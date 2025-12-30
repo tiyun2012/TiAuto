@@ -1,17 +1,110 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Canvas from './components/Canvas';
 import Sidebar from './components/Sidebar';
 import PropertiesPanel from './components/PropertiesPanel';
 import { Node, Edge, INITIAL_NODES, INITIAL_EDGES, NodeType } from './types';
 import { executeNode } from './services/workflowEngine';
-import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash } from 'lucide-react';
 
 export default function App() {
+  // Initialize with empty first, we will load inside useEffect
   const [nodes, setNodes] = useState<Node[]>(INITIAL_NODES);
   const [edges, setEdges] = useState<Edge[]>(INITIAL_EDGES);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false); // Track if initial load is done
+
+  // Hidden file input ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- Persistence Logic ---
+
+  // 1. Load from LocalStorage on Mount
+  useEffect(() => {
+    const savedData = localStorage.getItem('flowgen-workflow-autosave');
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData);
+        if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
+           setNodes(parsed.nodes);
+           setEdges(parsed.edges);
+           console.log("Restored session from LocalStorage");
+        }
+      } catch (e) {
+        console.error("Failed to parse autosave", e);
+      }
+    }
+    setIsLoaded(true);
+  }, []);
+
+  // 2. Auto-Save to LocalStorage on Change (Debounced)
+  useEffect(() => {
+    if (!isLoaded) return; // Don't overwrite with empty state before loading
+
+    const timeoutId = setTimeout(() => {
+      const state = { nodes, edges, timestamp: Date.now() };
+      localStorage.setItem('flowgen-workflow-autosave', JSON.stringify(state));
+    }, 1000); // 1 second debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [nodes, edges, isLoaded]);
+
+  // --- File Operations ---
+
+  const handleExport = () => {
+    const dataStr = JSON.stringify({ nodes, edges, version: 1 }, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `flowgen-workflow-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setToast({ message: "Workflow saved to file.", type: 'success' });
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed = JSON.parse(content);
+        
+        if (!parsed.nodes || !parsed.edges) {
+             throw new Error("Invalid file format: Missing nodes or edges");
+        }
+
+        setNodes(parsed.nodes);
+        setEdges(parsed.edges);
+        setToast({ message: "Workflow loaded successfully.", type: 'success' });
+        
+        // Reset input so same file can be selected again if needed
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      } catch (err: any) {
+        setToast({ message: `Failed to load file: ${err.message}`, type: 'error' });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleClearCanvas = () => {
+    if (window.confirm("Are you sure you want to clear the canvas? This cannot be undone.")) {
+      setNodes([]);
+      setEdges([]);
+      setSelectedNodeId(null);
+      setToast({ message: "Canvas cleared.", type: 'info' });
+    }
+  };
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -39,11 +132,13 @@ export default function App() {
                type === NodeType.PYTHON_EXEC ? 'Python Runner' :
                type === NodeType.VS_CODE ? 'Open VS Code' : 
                type === NodeType.TODO_LIST ? 'Task List' :
-               type === NodeType.TRIGGER ? 'Manual Trigger' : 'Note',
+               type === NodeType.TRIGGER ? 'Manual Trigger' : 
+               type === NodeType.SHELL_EXEC ? 'Shell Cmd' : 'Note',
         status: 'idle',
         shape: 'rectangle', // Default to rectangle
         prompt: type === NodeType.GEMINI_GENERATE ? 'Write code to...' :
                 type === NodeType.GEMINI_CHECK ? 'Check for security flaws.' : 
+                type === NodeType.SHELL_EXEC ? 'echo "Hello World"' :
                 type === NodeType.VS_CODE ? '' : '',
         todo: type === NodeType.TODO_LIST ? '- [ ] New Task' : '',
         dependencies: ''
@@ -168,11 +263,46 @@ export default function App() {
                 <h1 className="font-bold text-gray-200 tracking-tight">FlowGen AI</h1>
                 <span className="text-xs bg-gray-800 px-2 py-0.5 rounded text-gray-500 border border-gray-700">Beta</span>
             </div>
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-                <span>Gemini Powered</span>
-                <div className="flex items-center gap-1">
-                    <div className={`w-2 h-2 rounded-full ${process.env.API_KEY ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                    {process.env.API_KEY ? 'API Connected' : 'No API Key'}
+            
+            {/* Header Actions */}
+            <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 mr-4 border-r border-gray-800 pr-4">
+                  <button 
+                    onClick={handleExport}
+                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" 
+                    title="Save to File"
+                  >
+                    <Save className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={handleImportClick}
+                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" 
+                    title="Open File"
+                  >
+                    <FolderOpen className="w-4 h-4" />
+                  </button>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handleFileChange} 
+                    accept=".json" 
+                    className="hidden" 
+                  />
+                  <button 
+                    onClick={handleClearCanvas}
+                    className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-800 rounded transition-colors" 
+                    title="Clear Canvas"
+                  >
+                    <Trash className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-4 text-xs text-gray-500">
+                    <span>Gemini Powered</span>
+                    <div className="flex items-center gap-1">
+                        <div className={`w-2 h-2 rounded-full ${process.env.API_KEY ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        {process.env.API_KEY ? 'API Connected' : 'No API Key'}
+                    </div>
                 </div>
             </div>
         </div>
@@ -223,6 +353,9 @@ export default function App() {
                  <div className="flex items-center gap-1.5">
                     <ZoomIn className="w-3 h-3 opacity-70" />
                     <span>Zoom: Wheel or Alt+RMB</span>
+                </div>
+                <div className="ml-auto text-gray-600">
+                  {isLoaded ? 'Auto-save enabled' : 'Loading...'}
                 </div>
             </div>
         </div>

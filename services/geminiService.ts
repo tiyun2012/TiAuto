@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 
 // Ensure API key is present
@@ -18,7 +19,7 @@ export const generateCode = async (prompt: string, systemInstruction?: string): 
       model: CODE_MODEL,
       contents: prompt,
       config: {
-        systemInstruction: systemInstruction || "You are an expert software engineer. Output only the requested code or explanation. If generating code, wrap it in markdown code blocks.",
+        systemInstruction: systemInstruction || "You are an expert software engineer. Output only the requested code or explanation. If generating multiple files, separate them clearly with '### filename.ext'.",
         temperature: 0.2, // Lower temperature for more deterministic code
       },
     });

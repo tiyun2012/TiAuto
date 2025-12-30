@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal } from 'lucide-react';
+import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 interface PropertiesPanelProps {
@@ -11,10 +11,33 @@ interface PropertiesPanelProps {
 }
 
 const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, onDeleteNode, onClose }) => {
+  const [activeFile, setActiveFile] = useState<string | null>(null);
+
+  // Set default active file when node selection changes or output changes
+  useEffect(() => {
+    if (node?.data.files && Object.keys(node.data.files).length > 0) {
+        // If current active file exists in new list, keep it. Otherwise default to first.
+        if (!activeFile || !node.data.files[activeFile]) {
+            setActiveFile(Object.keys(node.data.files)[0]);
+        }
+    } else {
+        setActiveFile(null);
+    }
+  }, [node?.id, node?.data.files]);
+
   if (!node) return null;
 
   // Determine language based on node type and context
-  const getLanguage = (isOutput: boolean) => {
+  const getLanguage = (isOutput: boolean, fileName?: string) => {
+    if (fileName) {
+        if (fileName.endsWith('.py')) return 'python';
+        if (fileName.endsWith('.js')) return 'javascript';
+        if (fileName.endsWith('.ts')) return 'typescript';
+        if (fileName.endsWith('.json')) return 'json';
+        if (fileName.endsWith('.html')) return 'html';
+        if (fileName.endsWith('.css')) return 'css';
+    }
+
     if (node.type === NodeType.GEMINI_GENERATE && isOutput) return 'python';
     if (node.type === NodeType.GEMINI_CHECK && !isOutput) return 'text'; // Criteria
     if (node.type === NodeType.SIMULATE_RUN) return 'python';
@@ -24,6 +47,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
   };
 
   const currentShape = node.data.shape || 'rectangle';
+  const hasMultipleFiles = node.data.files && Object.keys(node.data.files).length > 0;
 
   return (
     <div className="absolute right-0 top-0 h-full w-[500px] bg-gray-900 border-l border-gray-800 shadow-2xl z-40 flex flex-col animate-slide-in">
@@ -244,7 +268,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
                     />
                 </div>
                 <p className="text-[10px] text-gray-500 mt-1">
-                   {node.type === NodeType.GEMINI_GENERATE && "Instructions for the AI to generate code."}
+                   {node.type === NodeType.GEMINI_GENERATE && "Instructions for the AI to generate code. Use `### filename.ext` to specify multiple files."}
                    {node.type === NodeType.GEMINI_CHECK && "Security policies and bugs to check for."}
                    {node.type === NodeType.NOTE && "Markdown supported."}
                 </p>
@@ -257,18 +281,46 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
           <div className="space-y-2 flex flex-col h-64 border-t border-gray-800 pt-4">
             <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-green-500 uppercase tracking-wider">Result</label>
-                <button 
-                  onClick={() => navigator.clipboard.writeText(node.data.output || '')}
-                  className="text-xs text-gray-500 hover:text-white flex items-center gap-1 bg-gray-800 px-2 py-1 rounded"
-                >
-                    <Copy className="w-3 h-3" /> Copy
-                </button>
+                
+                <div className="flex items-center gap-2">
+                    {/* Copy Button */}
+                    <button 
+                    onClick={() => {
+                        const content = hasMultipleFiles && activeFile ? node.data.files?.[activeFile] : node.data.output;
+                        navigator.clipboard.writeText(content || '');
+                    }}
+                    className="text-xs text-gray-500 hover:text-white flex items-center gap-1 bg-gray-800 px-2 py-1 rounded"
+                    >
+                        <Copy className="w-3 h-3" /> Copy
+                    </button>
+                </div>
             </div>
+
+            {/* File Tabs (If Multiple Files) */}
+            {hasMultipleFiles && (
+                <div className="flex overflow-x-auto gap-1 pb-2 scrollbar-hide border-b border-gray-800">
+                    {Object.keys(node.data.files!).map(fname => (
+                        <button
+                            key={fname}
+                            onClick={() => setActiveFile(fname)}
+                            className={`px-3 py-1.5 rounded-t-md text-xs font-mono border-b-2 flex items-center gap-2 transition-colors flex-shrink-0 ${
+                                activeFile === fname 
+                                ? 'border-blue-500 bg-gray-800 text-blue-400' 
+                                : 'border-transparent hover:bg-gray-800 text-gray-500'
+                            }`}
+                        >
+                            <FileText className="w-3 h-3" />
+                            {fname}
+                        </button>
+                    ))}
+                </div>
+            )}
+
             <div className="flex-1 border border-gray-700 rounded overflow-hidden relative group">
                  <Editor
                     height="100%"
-                    defaultLanguage={getLanguage(true)}
-                    value={node.data.output}
+                    defaultLanguage={getLanguage(true, activeFile || undefined)}
+                    value={hasMultipleFiles && activeFile ? node.data.files?.[activeFile] : node.data.output}
                     theme="vs-dark"
                     options={{
                         readOnly: true,
