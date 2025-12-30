@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, Pin, PinOff, Eye, SquareTerminal, FlaskConical } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X } from 'lucide-react';
 import { NODE_DIMENSIONS } from '../constants';
 
 interface NodeComponentProps {
@@ -29,8 +29,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   const height = NODE_DIMENSIONS[shape].height;
 
   // Widget State
-  const [isHovered, setIsHovered] = useState(false);
-  const [isPinned, setIsPinned] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
 
   let Icon = FileCode;
   let colorClass = "border-blue-500 bg-gray-800";
@@ -148,6 +147,16 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                     <Icon className={`w-10 h-10 ${titleColor}`} />
                     <div className="mt-2">{renderStatus()}</div>
                  </div>
+
+                 {/* Popup Toggle */}
+                 {!isNote && (
+                     <button 
+                        onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
+                        className={`absolute top-4 right-4 z-20 p-1 rounded-full bg-gray-900/80 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shadow-sm ${showPopup ? 'text-blue-400 border-blue-500/50' : ''}`}
+                     >
+                         {showPopup ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                     </button>
+                 )}
               </div>
           );
       }
@@ -163,6 +172,16 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                     {data.label}
                   </span>
                   <div className="mt-2">{renderStatus()}</div>
+
+                  {/* Popup Toggle */}
+                  {!isNote && (
+                     <button 
+                        onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
+                        className={`absolute top-1 right-1 z-20 p-1 rounded bg-gray-900/80 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shadow-sm ${showPopup ? 'text-blue-400 border-blue-500/50' : ''}`}
+                     >
+                         {showPopup ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                     </button>
+                 )}
               </div>
           );
       }
@@ -191,6 +210,17 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                         </div>
                     )}
                     {renderStatus()}
+
+                    {/* Popup Toggle */}
+                    {!isNote && (
+                         <button 
+                            onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
+                            className={`p-1 rounded hover:bg-gray-700/50 text-gray-400 hover:text-white transition-colors ${showPopup ? 'text-blue-400 bg-blue-500/10' : ''}`}
+                            title={showPopup ? "Close View" : "Quick View"}
+                         >
+                            {showPopup ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                         </button>
+                    )}
                 </div>
             </div>
 
@@ -208,10 +238,12 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                 </div>
             )}
             
-            {/* Rectangle Nodes: Center Eye Icon for preview hint (Except Shell) */}
+            {/* Rectangle Nodes: Content Preview Hint */}
             {!isNote && type !== NodeType.SHELL_EXEC && (
-                <div className="flex-1 flex items-center justify-center opacity-30">
-                    <Eye className="w-6 h-6 text-gray-500" />
+                <div className="flex-1 flex items-center justify-center">
+                    <div className="text-[10px] text-gray-600 font-mono text-center px-2 line-clamp-3 select-none pointer-events-none">
+                        {data.prompt || "No configuration"}
+                     </div>
                 </div>
             )}
         </div>
@@ -230,8 +262,6 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       }}
       onMouseDown={(e) => onMouseDown(e, node.id)}
       onContextMenu={(e) => onContextMenu(e, node.id)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       {/* 4 Ports */}
       {type !== NodeType.NOTE && PORTS.map(port => (
@@ -246,22 +276,21 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
 
       {renderContent()}
 
-      {/* Hover Widget (Detail View) */}
-      {!isNote && (isHovered || isPinned) && (
+      {/* Popup Widget (Detail View) */}
+      {!isNote && showPopup && (
           <div 
-            className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-72 bg-gray-900 border border-gray-600 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150 select-text cursor-default"
-            onMouseDown={(e) => e.stopPropagation()} // Prevent dragging node when clicking widget
+            className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-80 bg-gray-900 border border-gray-600 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150 select-text cursor-default"
+            onMouseDown={(e) => e.stopPropagation()} 
           >
               <div className="flex items-center justify-between p-2 bg-gray-800 border-b border-gray-700">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
                       {data.output ? "Output Result" : "Configuration"}
                   </span>
                   <button 
-                    onClick={(e) => { e.stopPropagation(); setIsPinned(!isPinned); }}
-                    className={`p-1 rounded hover:bg-gray-700 transition-colors ${isPinned ? 'text-blue-400 bg-blue-900/20' : 'text-gray-500'}`}
-                    title={isPinned ? "Unpin Widget" : "Pin Widget"}
+                    onClick={(e) => { e.stopPropagation(); setShowPopup(false); }}
+                    className="p-1 rounded hover:bg-gray-700 transition-colors text-gray-500 hover:text-white"
                   >
-                      {isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                      <X className="w-3.5 h-3.5" />
                   </button>
               </div>
               <div className="p-3 max-h-60 overflow-y-auto font-mono text-xs text-gray-300 scrollbar-thin">
