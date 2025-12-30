@@ -24,7 +24,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
     node, isSelected, onMouseDown, onContextMenu, onPortMouseDown, onPortMouseUp 
 }) => {
   const { type, data, id } = node;
-  const shape: NodeShape = data.shape || 'rectangle';
+  const shape: NodeShape = data.shape || 'square';
   const width = NODE_DIMENSIONS[shape].width;
   const height = NODE_DIMENSIONS[shape].height;
 
@@ -186,11 +186,11 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
           );
       }
       
-      // --- RECTANGLE SHAPE (Default Wide) ---
+      // --- RECTANGLE SHAPE (Wide Header) ---
       return (
-        <div className={`p-3 h-full flex flex-col ${isNote ? '' : 'text-gray-100'}`}>
+        <div className={`p-3 h-full flex flex-col justify-center ${isNote ? '' : 'text-gray-100'}`}>
             {/* Header */}
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 overflow-hidden">
                     <Icon className={`w-5 h-5 flex-shrink-0 ${isNote ? titleColor : titleColor}`} />
                     <span className={`font-bold text-sm truncate ${isNote ? 'text-yellow-900' : 'text-gray-100'}`}>{data.label}</span>
@@ -224,28 +224,14 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                 </div>
             </div>
 
-            {/* Note Body */}
+            {/* Note Body (Preserved) */}
             {isNote && (
-                 <div className="text-xs text-yellow-900 font-sans p-1 flex-1 overflow-hidden">
+                 <div className="text-xs text-yellow-900 font-sans p-1 mt-1 flex-1 overflow-hidden">
                     {data.prompt || "Note..."}
                 </div>
             )}
-
-            {/* Shell Body: Show command preview */}
-            {type === NodeType.SHELL_EXEC && (
-                 <div className="text-[10px] text-gray-400 font-mono p-1 bg-black/40 rounded border border-gray-700/50 overflow-hidden whitespace-nowrap">
-                    $ {data.prompt || "echo 'hello'"}
-                </div>
-            )}
             
-            {/* Rectangle Nodes: Content Preview Hint */}
-            {!isNote && type !== NodeType.SHELL_EXEC && (
-                <div className="flex-1 flex items-center justify-center">
-                    <div className="text-[10px] text-gray-600 font-mono text-center px-2 line-clamp-3 select-none pointer-events-none">
-                        {data.prompt || "No configuration"}
-                     </div>
-                </div>
-            )}
+            {/* Removed content preview for standard nodes as requested */}
         </div>
       );
   };
@@ -257,7 +243,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
         left: node.position.x, 
         top: node.position.y,
         width: width,
-        height: height,
+        height: isNote && shape === 'rectangle' ? 140 : height, // Force taller height for Notes if rectangle
         boxSizing: 'border-box'
       }}
       onMouseDown={(e) => onMouseDown(e, node.id)}

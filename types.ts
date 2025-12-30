@@ -65,7 +65,7 @@ export const INITIAL_NODES: Node[] = [
     position: { x: 300, y: 200 },
     data: { 
       label: 'Generate Python Script', 
-      shape: 'rectangle',
+      shape: 'square',
       prompt: 'Write a Python script to calculate the Fibonacci sequence up to n=10.',
       status: 'idle' 
     }
@@ -76,7 +76,7 @@ export const INITIAL_NODES: Node[] = [
     position: { x: 600, y: 200 },
     data: { 
       label: 'Security Audit', 
-      shape: 'rectangle',
+      shape: 'square',
       prompt: 'Analyze the code for any infinite loops or security issues.',
       status: 'idle' 
     }

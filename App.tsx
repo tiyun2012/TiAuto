@@ -132,6 +132,9 @@ export default function App() {
     // Use provided position or random near center
     const pos = position || { x: 300 + Math.random() * 50, y: 300 + Math.random() * 50 };
     
+    // Default to square unless it's a Note
+    const defaultShape = type === NodeType.NOTE ? 'rectangle' : 'square';
+
     const newNode: Node = {
       id,
       type,
@@ -146,7 +149,7 @@ export default function App() {
                type === NodeType.TRIGGER ? 'Manual Trigger' : 
                type === NodeType.SHELL_EXEC ? 'Shell Cmd' : 'Note',
         status: 'idle',
-        shape: 'rectangle', // Default to rectangle
+        shape: defaultShape, 
         prompt: type === NodeType.GEMINI_GENERATE ? 'Write code to...' :
                 type === NodeType.GEMINI_CHECK ? 'Check for security flaws.' : 
                 type === NodeType.SHELL_EXEC ? 'echo "Hello World"' :

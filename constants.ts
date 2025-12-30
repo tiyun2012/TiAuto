@@ -3,7 +3,7 @@ import { NodeShape } from './types';
 
 // Dimensions
 export const NODE_DIMENSIONS = {
-  rectangle: { width: 256, height: 120 }, // Previously 'square' (card style)
+  rectangle: { width: 256, height: 64 }, // Reduced height (Header only style)
   square: { width: 140, height: 140 },    // True square (compact)
   circle: { width: 140, height: 140 }
 };
@@ -22,6 +22,10 @@ export const getPortPosition = (
   const w = dims.width;
   const h = dims.height; 
 
+  // Special case for Note in rectangle mode which overrides height in CSS
+  // This logic is approximate for wire drawing on Notes.
+  // Ideally, we'd pass the actual height here, but for now we assume standard dims.
+  
   const centerX = nodeX + w / 2;
   const centerY = nodeY + h / 2;
 
