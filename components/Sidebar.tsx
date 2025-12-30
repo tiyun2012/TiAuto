@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { NodeType } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, SquareTerminal } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, SquareTerminal, FlaskConical } from 'lucide-react';
 
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
@@ -51,6 +52,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
             color="text-orange-400" 
             onClick={() => onAddNode(NodeType.GEMINI_CHECK)}
             type={NodeType.GEMINI_CHECK} 
+        />
+        <ToolButton 
+            icon={<FlaskConical />} 
+            label="Tests" 
+            color="text-cyan-400" 
+            onClick={() => onAddNode(NodeType.AI_UNIT_TEST)}
+            type={NodeType.AI_UNIT_TEST} 
         />
          <ToolButton 
             icon={<SquareTerminal />} 
@@ -105,7 +113,7 @@ const ToolButton = ({ icon, label, onClick, color, type }: { icon: any, label: s
         e.dataTransfer.effectAllowed = 'move';
     };
 
-    const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN].includes(type);
+    const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST].includes(type);
     const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC].includes(type);
 
     return (

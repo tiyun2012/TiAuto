@@ -4,7 +4,8 @@ import Sidebar from './components/Sidebar';
 import PropertiesPanel from './components/PropertiesPanel';
 import { Node, Edge, INITIAL_NODES, INITIAL_EDGES, NodeType } from './types';
 import { executeNode } from './services/workflowEngine';
-import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash } from 'lucide-react';
+import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X } from 'lucide-react';
+import { APP_TEMPLATES, Template } from './data/templates';
 
 export default function App() {
   // Initialize with empty first, we will load inside useEffect
@@ -14,6 +15,7 @@ export default function App() {
   const [isExecuting, setIsExecuting] = useState(false);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isLoaded, setIsLoaded] = useState(false); // Track if initial load is done
+  const [showTemplates, setShowTemplates] = useState(false);
 
   // Hidden file input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -104,6 +106,15 @@ export default function App() {
       setSelectedNodeId(null);
       setToast({ message: "Canvas cleared.", type: 'info' });
     }
+  };
+  
+  const handleLoadTemplate = (template: Template) => {
+      if (window.confirm(`Load "${template.name}"? This will replace your current workflow.`)) {
+          setNodes(template.nodes);
+          setEdges(template.edges);
+          setShowTemplates(false);
+          setToast({ message: `Loaded ${template.name}`, type: 'success' });
+      }
   };
 
   // Auto-dismiss toast
@@ -266,6 +277,14 @@ export default function App() {
             
             {/* Header Actions */}
             <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setShowTemplates(true)}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-xs font-medium transition-colors mr-2"
+                >
+                    <LayoutTemplate className="w-3.5 h-3.5" />
+                    Templates
+                </button>
+
                 <div className="flex items-center gap-1 mr-4 border-r border-gray-800 pr-4">
                   <button 
                     onClick={handleExport}
@@ -367,6 +386,43 @@ export default function App() {
             onDeleteNode={handleDeleteNode}
             onClose={() => setSelectedNodeId(null)}
           />
+        )}
+
+        {/* Templates Modal */}
+        {showTemplates && (
+            <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center animate-in fade-in duration-200">
+                <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                    <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <LayoutTemplate className="w-5 h-5 text-blue-500" />
+                            Load Workflow Template
+                        </h2>
+                        <button onClick={() => setShowTemplates(false)} className="text-gray-400 hover:text-white">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="p-4 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {APP_TEMPLATES.map((t, i) => (
+                            <button 
+                                key={i}
+                                onClick={() => handleLoadTemplate(t)}
+                                className="flex flex-col items-start p-4 rounded-lg bg-gray-800 border border-gray-700 hover:border-blue-500 hover:bg-gray-750 transition-all text-left group"
+                            >
+                                <div className="font-bold text-blue-400 mb-1 group-hover:text-blue-300">{t.name}</div>
+                                <div className="text-sm text-gray-400 leading-relaxed">{t.description}</div>
+                                <div className="mt-3 flex gap-2">
+                                    {t.nodes.map(n => (
+                                        <div key={n.id} className="w-2 h-2 rounded-full bg-gray-600" title={n.type}></div>
+                                    ))}
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="p-4 bg-gray-950/50 text-xs text-gray-500 text-center border-t border-gray-800">
+                        Loading a template will replace your current canvas.
+                    </div>
+                </div>
+            </div>
         )}
 
         {/* Toast Notification */}

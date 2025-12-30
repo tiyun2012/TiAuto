@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
 import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown } from 'lucide-react';
@@ -40,6 +41,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
 
     if (node.type === NodeType.GEMINI_GENERATE && isOutput) return 'python';
     if (node.type === NodeType.GEMINI_CHECK && !isOutput) return 'text'; // Criteria
+    if (node.type === NodeType.AI_UNIT_TEST && !isOutput) return 'text'; // Instructions
     if (node.type === NodeType.SIMULATE_RUN) return 'python';
     if (node.type === NodeType.PYTHON_EXEC && !isOutput) return 'python';
     if (node.type === NodeType.SHELL_EXEC) return 'shell';
@@ -58,6 +60,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
             node.type === NodeType.TRIGGER ? 'bg-green-500' :
             node.type === NodeType.GEMINI_GENERATE ? 'bg-purple-500' :
             node.type === NodeType.GEMINI_CHECK ? 'bg-orange-500' :
+            node.type === NodeType.AI_UNIT_TEST ? 'bg-cyan-500' :
             node.type === NodeType.SIMULATE_RUN ? 'bg-pink-500' : 
             node.type === NodeType.PYTHON_EXEC ? 'bg-yellow-600' :
             node.type === NodeType.SHELL_EXEC ? 'bg-gray-500' :
@@ -66,6 +69,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
           }`}></span>
           {node.type === NodeType.GEMINI_GENERATE ? 'Code Generator' :
            node.type === NodeType.GEMINI_CHECK ? 'Security Auditor' :
+           node.type === NodeType.AI_UNIT_TEST ? 'Unit Test Generator' :
            node.type === NodeType.SIMULATE_RUN ? 'Simulator' : 
            node.type === NodeType.PYTHON_EXEC ? 'Python Runner' :
            node.type === NodeType.SHELL_EXEC ? 'Shell Execution' :
@@ -246,7 +250,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
              node.type !== NodeType.TRIGGER && node.type !== NodeType.PYTHON_EXEC && node.type !== NodeType.SHELL_EXEC && (
               <div className="space-y-2 flex flex-col h-64">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex justify-between">
-                   <span>{node.type === NodeType.GEMINI_CHECK ? 'Check Criteria' : 'Prompt / Input'}</span>
+                   <span>{node.type === NodeType.GEMINI_CHECK ? 'Check Criteria' : node.type === NodeType.AI_UNIT_TEST ? 'Test Instructions' : 'Prompt / Input'}</span>
                    <span className="text-[10px] bg-gray-800 px-1 rounded border border-gray-700">Editor Mode</span>
                 </label>
                 <div className="flex-1 border border-gray-700 rounded overflow-hidden">
@@ -270,6 +274,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
                 <p className="text-[10px] text-gray-500 mt-1">
                    {node.type === NodeType.GEMINI_GENERATE && "Instructions for the AI to generate code. Use `### filename.ext` to specify multiple files."}
                    {node.type === NodeType.GEMINI_CHECK && "Security policies and bugs to check for."}
+                   {node.type === NodeType.AI_UNIT_TEST && "Specify testing framework (e.g. Jest, PyTest) and edge cases to cover."}
                    {node.type === NodeType.NOTE && "Markdown supported."}
                 </p>
               </div>

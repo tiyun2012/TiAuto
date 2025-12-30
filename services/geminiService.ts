@@ -30,6 +30,39 @@ export const generateCode = async (prompt: string, systemInstruction?: string): 
   }
 };
 
+export const generateUnitTests = async (context: string, instructions: string): Promise<string> => {
+  if (!API_KEY) throw new Error("API Key is missing");
+
+  try {
+    const prompt = `
+      CONTEXT (Code to test):
+      ${context}
+
+      INSTRUCTIONS:
+      ${instructions}
+
+      TASK:
+      Write comprehensive unit tests for the provided code. 
+      If the language is Python, use 'unittest' or 'pytest'.
+      If JavaScript/TypeScript, use 'Jest' syntax unless specified otherwise.
+      Separate files using '### filename' format.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: CODE_MODEL,
+      contents: prompt,
+      config: {
+        systemInstruction: "You are a Senior QA Automation Engineer. Write robust, edge-case covering unit tests. Output code only.",
+        temperature: 0.2,
+      },
+    });
+    return response.text || "No tests generated.";
+  } catch (error: any) {
+    console.error("Gemini Test Gen Error:", error);
+    throw new Error(error.message || "Failed to generate tests.");
+  }
+};
+
 export const checkCode = async (code: string, criteria: string): Promise<string> => {
   if (!API_KEY) throw new Error("API Key is missing");
 

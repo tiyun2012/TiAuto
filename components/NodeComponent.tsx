@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, Pin, PinOff, Eye, SquareTerminal } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, Pin, PinOff, Eye, SquareTerminal, FlaskConical } from 'lucide-react';
 import { NODE_DIMENSIONS } from '../constants';
 
 interface NodeComponentProps {
@@ -36,7 +37,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   let titleColor = "text-blue-400";
 
   // Categorize
-  const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN].includes(type);
+  const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST].includes(type);
   const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC].includes(type);
   const isNote = type === NodeType.NOTE;
 
@@ -55,6 +56,11 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       Icon = ShieldCheck;
       colorClass = "border-orange-500 bg-gray-800";
       titleColor = "text-orange-400";
+      break;
+    case NodeType.AI_UNIT_TEST:
+      Icon = FlaskConical;
+      colorClass = "border-cyan-500 bg-gray-800";
+      titleColor = "text-cyan-400";
       break;
     case NodeType.SIMULATE_RUN:
       Icon = Terminal;

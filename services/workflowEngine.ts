@@ -1,6 +1,6 @@
 
 import { Node, Edge, NodeType } from '../types';
-import { generateCode, checkCode, simulateExecution } from './geminiService';
+import { generateCode, checkCode, simulateExecution, generateUnitTests } from './geminiService';
 import { runPythonCode } from './pyodideService';
 import { executeShellCommand } from './commandService';
 import { parseOutputToFiles, formatFilesForPrompt } from './fileParsingService';
@@ -90,6 +90,16 @@ export const executeNode = async (
         const fullContext = `${vfsString}\n\n${textContext}`;
         result = await checkCode(fullContext, checkCriteria);
         extractedFiles = parseOutputToFiles(result); // Maybe it suggests a fixed file
+        break;
+      
+      case NodeType.AI_UNIT_TEST:
+        if (!vfsString.trim() && !textContext.trim()) {
+            throw new Error("No input code found to generate tests for.");
+        }
+        const testContext = `${vfsString}\n\n${textContext}`;
+        const instructions = node.data.prompt || "Write unit tests for the provided code.";
+        result = await generateUnitTests(testContext, instructions);
+        extractedFiles = parseOutputToFiles(result);
         break;
 
       case NodeType.SIMULATE_RUN:
