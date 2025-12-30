@@ -1,10 +1,12 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Canvas from './components/Canvas';
 import Sidebar from './components/Sidebar';
 import PropertiesPanel from './components/PropertiesPanel';
+import JsonViewModal from './components/JsonViewModal';
 import { Node, Edge, INITIAL_NODES, INITIAL_EDGES, NodeType } from './types';
 import { executeNode } from './services/workflowEngine';
-import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X } from 'lucide-react';
+import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson } from 'lucide-react';
 import { APP_TEMPLATES, Template } from './data/templates';
 
 export default function App() {
@@ -16,6 +18,7 @@ export default function App() {
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isLoaded, setIsLoaded] = useState(false); // Track if initial load is done
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showJsonView, setShowJsonView] = useState(false);
 
   // Hidden file input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -290,6 +293,13 @@ export default function App() {
 
                 <div className="flex items-center gap-1 mr-4 border-r border-gray-800 pr-4">
                   <button 
+                    onClick={() => setShowJsonView(true)}
+                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" 
+                    title="View & Verify JSON"
+                  >
+                    <FileJson className="w-4 h-4" />
+                  </button>
+                  <button 
                     onClick={handleExport}
                     className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" 
                     title="Save to File"
@@ -426,6 +436,14 @@ export default function App() {
                     </div>
                 </div>
             </div>
+        )}
+
+        {/* JSON View Modal */}
+        {showJsonView && (
+            <JsonViewModal 
+                data={{ nodes, edges, version: 1 }} 
+                onClose={() => setShowJsonView(false)} 
+            />
         )}
 
         {/* Toast Notification */}

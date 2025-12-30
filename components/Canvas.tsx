@@ -3,7 +3,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Node, Edge, NodeType, NodeShape } from '../types';
 import NodeComponent from './NodeComponent';
 import { getPortPosition } from '../constants';
-import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical } from 'lucide-react';
+import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical, FileDiff } from 'lucide-react';
 
 interface CanvasProps {
   nodes: Node[];
@@ -26,6 +26,7 @@ const NODE_OPTIONS = [
   { type: NodeType.SHELL_EXEC, label: 'Shell Command', icon: SquareTerminal, desc: 'CLI Execution', color: 'text-gray-200' },
   { type: NodeType.SIMULATE_RUN, label: 'Simulator', icon: Terminal, desc: 'AI Simulated Run', color: 'text-pink-400' },
   { type: NodeType.PYTHON_EXEC, label: 'Python Runner', icon: Binary, desc: 'Executes Python in Browser', color: 'text-yellow-400' },
+  { type: NodeType.DIFF, label: 'Diff Check', icon: FileDiff, desc: 'Compare node outputs', color: 'text-indigo-400' },
   { type: NodeType.TODO_LIST, label: 'Task List', icon: ListTodo, desc: 'Manual checklist', color: 'text-teal-400' },
   { type: NodeType.VS_CODE, label: 'VS Code', icon: Laptop, desc: 'Open local editor', color: 'text-blue-400' },
   { type: NodeType.NOTE, label: 'Note', icon: StickyNote, desc: 'Add comments', color: 'text-yellow-400' },

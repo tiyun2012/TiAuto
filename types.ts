@@ -9,7 +9,8 @@ export enum NodeType {
   SHELL_EXEC = 'SHELL_EXEC',
   VS_CODE = 'VS_CODE',
   TODO_LIST = 'TODO_LIST',
-  NOTE = 'NOTE'
+  NOTE = 'NOTE',
+  DIFF = 'DIFF'
 }
 
 export type NodeShape = 'rectangle' | 'square' | 'circle';
@@ -17,7 +18,7 @@ export type NodeShape = 'rectangle' | 'square' | 'circle';
 export interface NodeData {
   label: string;
   shape?: NodeShape; // 'rectangle' | 'square' | 'circle'
-  prompt?: string; // For AI nodes, or path for VS Code, or Command for Shell
+  prompt?: string; // For AI nodes, or path for VS Code, or Command for Shell. For Diff: Manual 'Original' text.
   todo?: string; // For Task Lists or Manual Instructions
   dependencies?: string; // Comma separated list of python packages
   code?: string; // For output or static code
@@ -28,6 +29,10 @@ export interface NodeData {
   files?: Record<string, string>; // NEW: Structured file storage { 'filename.ext': 'content' }
   status?: 'idle' | 'running' | 'success' | 'error';
   errorMessage?: string;
+  
+  // Diff specific data
+  diffOriginal?: string;
+  diffModified?: string;
 }
 
 export interface Node {

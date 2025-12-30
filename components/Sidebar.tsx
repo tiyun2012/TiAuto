@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { NodeType } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, SquareTerminal, FlaskConical } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, SquareTerminal, FlaskConical, FileDiff } from 'lucide-react';
 
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
@@ -82,6 +82,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
             type={NodeType.PYTHON_EXEC} 
         />
         <ToolButton 
+            icon={<FileDiff />} 
+            label="Diff" 
+            color="text-indigo-400" 
+            onClick={() => onAddNode(NodeType.DIFF)}
+            type={NodeType.DIFF} 
+        />
+        <ToolButton 
             icon={<ListTodo />} 
             label="Tasks" 
             color="text-teal-400" 
@@ -114,7 +121,7 @@ const ToolButton = ({ icon, label, onClick, color, type }: { icon: any, label: s
     };
 
     const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST].includes(type);
-    const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC].includes(type);
+    const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF].includes(type);
 
     return (
         <div 

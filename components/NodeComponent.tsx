@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff } from 'lucide-react';
 import { NODE_DIMENSIONS } from '../constants';
 
 interface NodeComponentProps {
@@ -13,13 +13,14 @@ interface NodeComponentProps {
   onPortMouseUp: (e: React.MouseEvent, nodeId: string, handle: string) => void;
 }
 
-// Updated Port Positioning: Centered exactly on the bounding box edge (0 offset)
-// This ensures the "socket" (bg-gray-950) sits exactly half-in/half-out, creating a perfect cutout.
+// Updated Port Positioning: 
+// Use -0.5 (2px) offset to compensate for the parent's border-2 (2px).
+// This places the center of the port exactly on the outer edge of the node.
 const PORTS = [
-    { id: 'top', className: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2' },
-    { id: 'right', className: 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2' },
-    { id: 'bottom', className: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2' },
-    { id: 'left', className: 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2' }
+    { id: 'top', className: '-top-0.5 left-1/2 -translate-x-1/2 -translate-y-1/2' },
+    { id: 'right', className: '-right-0.5 top-1/2 translate-x-1/2 -translate-y-1/2' },
+    { id: 'bottom', className: '-bottom-0.5 left-1/2 -translate-x-1/2 translate-y-1/2' },
+    { id: 'left', className: '-left-0.5 top-1/2 -translate-x-1/2 -translate-y-1/2' }
 ];
 
 const NodeComponent: React.FC<NodeComponentProps> = ({ 
@@ -42,7 +43,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
 
   // Categorize
   const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST].includes(type);
-  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC].includes(type);
+  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF].includes(type);
   const isNote = type === NodeType.NOTE;
 
   switch (type) {
@@ -109,6 +110,13 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       titleColor = "text-blue-300";
       portColor = "bg-blue-400";
       break;
+    case NodeType.DIFF:
+      Icon = FileDiff;
+      bgClass = "bg-gray-800";
+      borderClass = "border-indigo-500";
+      titleColor = "text-indigo-400";
+      portColor = "bg-indigo-500";
+      break;
     case NodeType.NOTE:
       Icon = StickyNote;
       bgClass = "bg-yellow-100 text-yellow-900";
@@ -141,6 +149,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       if (type === NodeType.PYTHON_EXEC) return data.code || "Executes connected Python code.";
       if (type === NodeType.SHELL_EXEC) return data.prompt || "Execute Shell Command";
       if (type === NodeType.TODO_LIST) return data.todo;
+      if (type === NodeType.DIFF) return "Comparing inputs...";
       if (data.output) return data.output;
       return data.prompt || "No details.";
   };
@@ -288,6 +297,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
     >
       {/* 4 Ports */}
       {/* Socket Style: bg-gray-950 (Canvas color) + Border-2 (Node Color) + Inner Dot */}
+      {/* We use explicit flex centering for the inner dot */}
       {type !== NodeType.NOTE && PORTS.map(port => (
           <div
             key={port.id}

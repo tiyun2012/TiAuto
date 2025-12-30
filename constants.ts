@@ -26,8 +26,8 @@ export const getPortPosition = (
   const centerX = nodeX + w / 2;
   const centerY = nodeY + h / 2;
 
-  // With ports positioned via CSS as 'top: 0' (centered on the bounding edge),
-  // the center of the port is exactly on the geometry lines.
+  // The CSS positions the ports centered exactly on the boundary lines (0px offset).
+  // Therefore, the connection point is exactly on the bounding box edge.
 
   if (shape === 'circle') {
      // For circle, we approximate the cardinal points.

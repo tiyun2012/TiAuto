@@ -168,6 +168,37 @@ export const executeNode = async (
         result = launchMsg;
         await new Promise(r => setTimeout(r, 1000)); 
         break;
+      
+      case NodeType.DIFF:
+        // Diff Logic: Compare parents
+        if (parents.length === 0) {
+            // No parents? Compare manual prompt vs empty
+             updateNodeData(node.id, { 
+                diffOriginal: node.data.prompt || "",
+                diffModified: "" 
+             });
+             result = "Warning: No input nodes to compare.";
+        } else if (parents.length === 1) {
+            // 1 Parent: Compare Manual (Left) vs Parent Output (Right)
+            const parentOut = parents[0].data.output || parents[0].data.code || "";
+            updateNodeData(node.id, { 
+                diffOriginal: node.data.prompt || "",
+                diffModified: parentOut
+             });
+             result = "Diff computed: Static Text (Original) vs Input Node (Modified).";
+        } else {
+            // >= 2 Parents: Compare Parent 1 (Left) vs Parent 2 (Right)
+            // Use connection order if possible, or just index
+            const original = parents[0].data.output || parents[0].data.code || "";
+            const modified = parents[1].data.output || parents[1].data.code || "";
+            
+             updateNodeData(node.id, { 
+                diffOriginal: original,
+                diffModified: modified
+             });
+             result = `Diff computed between ${parents[0].data.label} and ${parents[1].data.label}.`;
+        }
+        break;
 
       case NodeType.NOTE:
         result = node.data.prompt || "Note";

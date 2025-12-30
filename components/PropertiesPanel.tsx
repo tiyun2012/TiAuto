@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
 import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown } from 'lucide-react';
-import Editor from '@monaco-editor/react';
+import Editor, { DiffEditor } from '@monaco-editor/react';
 
 interface PropertiesPanelProps {
   node: Node | null;
@@ -65,6 +65,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
             node.type === NodeType.PYTHON_EXEC ? 'bg-yellow-600' :
             node.type === NodeType.SHELL_EXEC ? 'bg-gray-500' :
             node.type === NodeType.VS_CODE ? 'bg-blue-500' : 
+            node.type === NodeType.DIFF ? 'bg-indigo-500' :
             node.type === NodeType.TODO_LIST ? 'bg-teal-500' : 'bg-yellow-500'
           }`}></span>
           {node.type === NodeType.GEMINI_GENERATE ? 'Code Generator' :
@@ -75,6 +76,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
            node.type === NodeType.SHELL_EXEC ? 'Shell Execution' :
            node.type === NodeType.VS_CODE ? 'VS Code Launcher' :
            node.type === NodeType.TODO_LIST ? 'Task List' :
+           node.type === NodeType.DIFF ? 'Output Comparer' :
            node.type.replace('_', ' ')}
         </h2>
         <div className="flex gap-2">
@@ -245,6 +247,31 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
                     className="w-full h-64 bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-sans"
                 />
             </div>
+        ) : node.type === NodeType.DIFF ? (
+            <div className="space-y-2 flex flex-col h-48">
+                <label className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex justify-between">
+                   <span>Manual Original Text</span>
+                   <span className="text-[10px] bg-gray-800 px-1 rounded border border-gray-700">Optional</span>
+                </label>
+                <div className="flex-1 border border-gray-700 rounded overflow-hidden">
+                    <Editor
+                        height="100%"
+                        defaultLanguage="markdown"
+                        value={node.data.prompt || ''}
+                        onChange={(value) => onUpdateNode(node.id, { prompt: value })}
+                        theme="vs-dark"
+                        options={{
+                            minimap: { enabled: false },
+                            fontSize: 12,
+                            lineNumbers: 'off',
+                            wordWrap: 'on'
+                        }}
+                    />
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">
+                   If only one node is connected, this text acts as the "Original" version for comparison.
+                </p>
+            </div>
         ) : (
              /* Prompt / Configuration Input for Other Nodes */
              node.type !== NodeType.TRIGGER && node.type !== NodeType.PYTHON_EXEC && node.type !== NodeType.SHELL_EXEC && (
@@ -283,22 +310,26 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
 
         {/* Output Display */}
         {node.data.output && (
-          <div className="space-y-2 flex flex-col h-64 border-t border-gray-800 pt-4">
+          <div className="space-y-2 flex flex-col h-80 border-t border-gray-800 pt-4">
             <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-green-500 uppercase tracking-wider">Result</label>
+                <label className="text-xs font-bold text-green-500 uppercase tracking-wider">
+                    {node.type === NodeType.DIFF ? 'Comparison Result' : 'Result'}
+                </label>
                 
-                <div className="flex items-center gap-2">
-                    {/* Copy Button */}
-                    <button 
-                    onClick={() => {
-                        const content = hasMultipleFiles && activeFile ? node.data.files?.[activeFile] : node.data.output;
-                        navigator.clipboard.writeText(content || '');
-                    }}
-                    className="text-xs text-gray-500 hover:text-white flex items-center gap-1 bg-gray-800 px-2 py-1 rounded"
-                    >
-                        <Copy className="w-3 h-3" /> Copy
-                    </button>
-                </div>
+                {node.type !== NodeType.DIFF && (
+                    <div className="flex items-center gap-2">
+                        {/* Copy Button */}
+                        <button 
+                        onClick={() => {
+                            const content = hasMultipleFiles && activeFile ? node.data.files?.[activeFile] : node.data.output;
+                            navigator.clipboard.writeText(content || '');
+                        }}
+                        className="text-xs text-gray-500 hover:text-white flex items-center gap-1 bg-gray-800 px-2 py-1 rounded"
+                        >
+                            <Copy className="w-3 h-3" /> Copy
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* File Tabs (If Multiple Files) */}
@@ -321,23 +352,41 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
                 </div>
             )}
 
+            {/* SPECIAL DIFF EDITOR OR STANDARD EDITOR */}
             <div className="flex-1 border border-gray-700 rounded overflow-hidden relative group">
-                 <Editor
-                    height="100%"
-                    defaultLanguage={getLanguage(true, activeFile || undefined)}
-                    value={hasMultipleFiles && activeFile ? node.data.files?.[activeFile] : node.data.output}
-                    theme="vs-dark"
-                    options={{
-                        readOnly: true,
-                        minimap: { enabled: false },
-                        fontSize: 13,
-                        lineNumbers: 'on',
-                        scrollBeyondLastLine: false,
-                        automaticLayout: true,
-                        padding: { top: 10, bottom: 10 },
-                        wordWrap: 'on'
-                    }}
-                />
+                 {node.type === NodeType.DIFF ? (
+                     <DiffEditor 
+                        height="100%"
+                        original={node.data.diffOriginal || ""}
+                        modified={node.data.diffModified || ""}
+                        language="python" // Defaulting to python for code, but could be dynamic
+                        theme="vs-dark"
+                        options={{
+                            readOnly: true,
+                            minimap: { enabled: false },
+                            fontSize: 12,
+                            renderSideBySide: true,
+                            wordWrap: 'on'
+                        }}
+                     />
+                 ) : (
+                    <Editor
+                        height="100%"
+                        defaultLanguage={getLanguage(true, activeFile || undefined)}
+                        value={hasMultipleFiles && activeFile ? node.data.files?.[activeFile] : node.data.output}
+                        theme="vs-dark"
+                        options={{
+                            readOnly: true,
+                            minimap: { enabled: false },
+                            fontSize: 13,
+                            lineNumbers: 'on',
+                            scrollBeyondLastLine: false,
+                            automaticLayout: true,
+                            padding: { top: 10, bottom: 10 },
+                            wordWrap: 'on'
+                        }}
+                    />
+                 )}
             </div>
           </div>
         )}
