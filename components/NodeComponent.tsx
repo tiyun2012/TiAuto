@@ -34,6 +34,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   let Icon = FileCode;
   let colorClass = "border-blue-500 bg-gray-800";
   let titleColor = "text-blue-400";
+  let portColor = "bg-blue-500 hover:bg-blue-400 shadow-blue-500/50"; 
 
   // Categorize
   const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST].includes(type);
@@ -45,51 +46,61 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       Icon = Play;
       colorClass = "border-green-500 bg-gray-800";
       titleColor = "text-green-400";
+      portColor = "bg-green-500 hover:bg-green-400 shadow-green-500/50";
       break;
     case NodeType.GEMINI_GENERATE:
       Icon = FileCode;
       colorClass = "border-purple-500 bg-gray-800";
       titleColor = "text-purple-400";
+      portColor = "bg-purple-500 hover:bg-purple-400 shadow-purple-500/50";
       break;
     case NodeType.GEMINI_CHECK:
       Icon = ShieldCheck;
       colorClass = "border-orange-500 bg-gray-800";
       titleColor = "text-orange-400";
+      portColor = "bg-orange-500 hover:bg-orange-400 shadow-orange-500/50";
       break;
     case NodeType.AI_UNIT_TEST:
       Icon = FlaskConical;
       colorClass = "border-cyan-500 bg-gray-800";
       titleColor = "text-cyan-400";
+      portColor = "bg-cyan-500 hover:bg-cyan-400 shadow-cyan-500/50";
       break;
     case NodeType.SIMULATE_RUN:
       Icon = Terminal;
       colorClass = "border-pink-500 bg-gray-800";
       titleColor = "text-pink-400";
+      portColor = "bg-pink-500 hover:bg-pink-400 shadow-pink-500/50";
       break;
     case NodeType.SHELL_EXEC:
       Icon = SquareTerminal;
       colorClass = "border-gray-500 bg-gray-900";
       titleColor = "text-gray-300";
+      portColor = "bg-gray-400 hover:bg-gray-200 shadow-gray-500/50";
       break;
     case NodeType.PYTHON_EXEC:
       Icon = Binary;
       colorClass = "border-yellow-600 bg-gray-800";
       titleColor = "text-yellow-500";
+      portColor = "bg-yellow-500 hover:bg-yellow-400 shadow-yellow-500/50";
       break;
     case NodeType.TODO_LIST:
       Icon = ListTodo;
       colorClass = "border-teal-500 bg-gray-800";
       titleColor = "text-teal-400";
+      portColor = "bg-teal-500 hover:bg-teal-400 shadow-teal-500/50";
       break;
     case NodeType.VS_CODE:
       Icon = Laptop;
       colorClass = "border-blue-400 bg-gray-800";
       titleColor = "text-blue-300";
+      portColor = "bg-blue-400 hover:bg-blue-300 shadow-blue-500/50";
       break;
     case NodeType.NOTE:
       Icon = StickyNote;
       colorClass = "border-yellow-200 bg-yellow-100 text-yellow-900";
       titleColor = "text-yellow-800";
+      portColor = "bg-yellow-500";
       break;
   }
   
@@ -104,9 +115,9 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
 
   // Status Indicator
   const renderStatus = () => {
-    if (data.status === 'running') return <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />;
-    if (data.status === 'success') return <CheckCircle2 className="w-5 h-5 text-green-500" />;
-    if (data.status === 'error') return <AlertCircle className="w-5 h-5 text-red-500" />;
+    if (data.status === 'running') return <div className="animate-spin h-3 w-3 border-[1.5px] border-white border-t-transparent rounded-full shadow-sm" />;
+    if (data.status === 'success') return <CheckCircle2 className="w-4 h-4 text-green-500 bg-gray-900 rounded-full" />;
+    if (data.status === 'error') return <AlertCircle className="w-4 h-4 text-red-500 bg-gray-900 rounded-full" />;
     return null;
   };
 
@@ -123,36 +134,40 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       // --- CIRCLE SHAPE ---
       if (shape === 'circle') {
           const r = width / 2;
-          const textRadius = r - 16;
+          const textRadius = r - 12; // Push text closer to edge
           const pathId = `curve-${id}`;
           
           return (
-              <div className="relative w-full h-full flex items-center justify-center">
-                 {/* Curved Text */}
-                 <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+              <div className="relative w-full h-full">
+                 {/* 1. Curved Text (Label) */}
+                 <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-10">
                      <path 
                         id={pathId} 
                         d={`M 10,${height/2 + 10} A ${textRadius},${textRadius} 0 1,1 ${width-10},${height/2 + 10}`} 
                         fill="transparent" 
                      />
-                     <text className={`text-[10px] font-bold uppercase tracking-widest ${isNote ? 'fill-yellow-900' : 'fill-gray-300'}`}>
+                     <text className={`text-[9px] font-bold uppercase tracking-widest ${isNote ? 'fill-yellow-900' : 'fill-gray-400'}`}>
                         <textPath href={`#${pathId}`} startOffset="50%" textAnchor="middle">
                             {data.label}
                         </textPath>
                      </text>
                  </svg>
 
-                 {/* Centered Icon */}
-                 <div className="z-10 flex flex-col items-center justify-center">
-                    <Icon className={`w-10 h-10 ${titleColor}`} />
-                    <div className="mt-2">{renderStatus()}</div>
+                 {/* 2. Centered Icon */}
+                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <Icon className={`w-12 h-12 ${titleColor} opacity-90`} />
                  </div>
 
-                 {/* Popup Toggle */}
+                 {/* 3. Status Indicator (Bottom Center) */}
+                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+                     {renderStatus()}
+                 </div>
+
+                 {/* 4. Popup Toggle (Top Right Offset) */}
                  {!isNote && (
                      <button 
                         onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
-                        className={`absolute top-4 right-4 z-20 p-1 rounded-full bg-gray-900/80 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shadow-sm ${showPopup ? 'text-blue-400 border-blue-500/50' : ''}`}
+                        className={`absolute top-2 right-2 z-30 p-1 rounded-full bg-gray-900/80 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shadow-sm ${showPopup ? 'text-blue-400 border-blue-500/50' : ''}`}
                      >
                          {showPopup ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                      </button>
@@ -164,20 +179,29 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       // --- SQUARE SHAPE (True Square) ---
       if (shape === 'square') {
           return (
-              <div className="relative w-full h-full flex flex-col items-center justify-center p-2 text-center">
-                  <div className="mb-2">
-                     <Icon className={`w-10 h-10 ${titleColor}`} />
+              <div className="relative w-full h-full">
+                  {/* 1. Center Icon */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-4">
+                      <Icon className={`w-14 h-14 ${titleColor} opacity-90 transition-transform group-hover:scale-110 duration-300`} />
                   </div>
-                  <span className={`font-bold text-xs leading-tight line-clamp-2 px-1 ${isNote ? 'text-yellow-900' : 'text-gray-200'}`}>
-                    {data.label}
-                  </span>
-                  <div className="mt-2">{renderStatus()}</div>
+                  
+                  {/* 2. Label (Bottom Aligned) */}
+                  <div className="absolute bottom-0 w-full p-2 flex justify-center pointer-events-none">
+                    <span className={`font-bold text-[10px] uppercase tracking-wide leading-tight text-center line-clamp-2 px-2 py-0.5 rounded-full ${isNote ? 'text-yellow-900' : 'text-gray-300 bg-gray-900/60 backdrop-blur-sm'}`}>
+                        {data.label}
+                    </span>
+                  </div>
+                  
+                  {/* 3. Status (Top Left) */}
+                  <div className="absolute top-2 left-2 z-20">
+                    {renderStatus()}
+                  </div>
 
-                  {/* Popup Toggle */}
+                  {/* 4. Popup Toggle (Top Right) */}
                   {!isNote && (
                      <button 
                         onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
-                        className={`absolute top-1 right-1 z-20 p-1 rounded bg-gray-900/80 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shadow-sm ${showPopup ? 'text-blue-400 border-blue-500/50' : ''}`}
+                        className={`absolute top-2 right-2 z-30 p-1.5 rounded-md bg-gray-900/40 border border-gray-700/30 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shadow-sm backdrop-blur-sm ${showPopup ? 'text-blue-400 border-blue-500/50 bg-blue-900/20' : ''}`}
                      >
                          {showPopup ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                      </button>
@@ -230,8 +254,6 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                     {data.prompt || "Note..."}
                 </div>
             )}
-            
-            {/* Removed content preview for standard nodes as requested */}
         </div>
       );
   };
@@ -253,11 +275,13 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       {type !== NodeType.NOTE && PORTS.map(port => (
           <div
             key={port.id}
-            className={`absolute w-3 h-3 bg-gray-400 rounded-full border border-gray-900 hover:bg-white hover:scale-150 cursor-crosshair z-30 transition-transform ${port.className}`}
+            className={`absolute w-3.5 h-3.5 rounded-full border border-gray-900/20 hover:scale-125 cursor-crosshair z-30 transition-all duration-200 ${portColor} ${port.className}`}
             onMouseDown={(e) => { e.stopPropagation(); onPortMouseDown(e, node.id, port.id); }}
             onMouseUp={(e) => { e.stopPropagation(); onPortMouseUp(e, node.id, port.id); }}
             title={`${port.id} Port`}
-          />
+          >
+             <div className="w-1 h-1 bg-white/30 rounded-full absolute top-1 left-1 pointer-events-none" />
+          </div>
       ))}
 
       {renderContent()}
