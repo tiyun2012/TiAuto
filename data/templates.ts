@@ -224,5 +224,43 @@ export const APP_TEMPLATES: Template[] = [
       { id: 'diffe-3', source: 'diff-v1', target: 'diff-node' },
       { id: 'diffe-4', source: 'diff-v2', target: 'diff-node' }
     ]
+  },
+  {
+    name: "Structured Code Audit",
+    description: "Demonstrates richer checking capabilities with JSON-based structured output (Line, Severity, Suggestion).",
+    nodes: [
+      {
+        id: 's-trigger',
+        type: NodeType.TRIGGER,
+        position: { x: 50, y: 300 },
+        data: { label: 'Start Audit', status: 'idle', shape: 'circle' }
+      },
+      {
+        id: 's-gen',
+        type: NodeType.GEMINI_GENERATE,
+        position: { x: 250, y: 200 },
+        data: {
+          label: 'Vulnerable Code',
+          shape: 'square',
+          status: 'idle',
+          prompt: "Write a Python script that uses `subprocess.call` to ping a host provided by user input without any validation. Also use a weak hash function."
+        }
+      },
+      {
+        id: 's-check',
+        type: NodeType.GEMINI_CHECK,
+        position: { x: 600, y: 200 },
+        data: {
+          label: 'Security Auditor',
+          shape: 'square',
+          status: 'idle',
+          prompt: "Identify security vulnerabilities (OWASP Top 10)."
+        }
+      }
+    ],
+    edges: [
+      { id: 'se-1', source: 's-trigger', target: 's-gen' },
+      { id: 'se-2', source: 's-gen', target: 's-check' }
+    ]
   }
 ];

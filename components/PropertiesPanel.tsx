@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2 } from 'lucide-react';
+import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2, AlertTriangle, AlertCircle, Info, CheckCircle2 } from 'lucide-react';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 
 interface PropertiesPanelProps {
@@ -62,6 +62,60 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
   const currentShape = node.data.shape || 'rectangle';
   const hasMultipleFiles = node.data.files && Object.keys(node.data.files).length > 0;
   const isGenerative = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.AI_UNIT_TEST].includes(node.type);
+
+  // Helper to render structured checks
+  const renderCheckResults = (output: string) => {
+      try {
+          const issues = JSON.parse(output);
+          if (!Array.isArray(issues)) throw new Error("Not an array");
+
+          if (issues.length === 0) {
+              return (
+                  <div className="flex flex-col items-center justify-center h-full text-green-400">
+                      <CheckCircle2 className="w-12 h-12 mb-2" />
+                      <p>No issues found!</p>
+                  </div>
+              )
+          }
+
+          return (
+              <div className="flex flex-col gap-2 p-2 bg-gray-950 overflow-y-auto h-full">
+                  {issues.map((issue: any, idx: number) => (
+                      <div key={idx} className="p-3 bg-gray-800 rounded border border-gray-700 flex gap-3">
+                          <div className="shrink-0 pt-0.5">
+                              {issue.severity === 'High' ? <AlertCircle className="w-5 h-5 text-red-500" /> :
+                               issue.severity === 'Medium' ? <AlertTriangle className="w-5 h-5 text-yellow-500" /> :
+                               <Info className="w-5 h-5 text-blue-500" />}
+                          </div>
+                          <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                  <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                                      issue.severity === 'High' ? 'bg-red-900/50 text-red-400' :
+                                      issue.severity === 'Medium' ? 'bg-yellow-900/50 text-yellow-400' :
+                                      'bg-blue-900/50 text-blue-400'
+                                  }`}>{issue.severity}</span>
+                                  {issue.line && <span className="text-xs text-gray-500">Line {issue.line}</span>}
+                              </div>
+                              <p className="text-sm text-gray-200 font-medium mb-1">{issue.issue}</p>
+                              <p className="text-xs text-gray-400">{issue.suggestion}</p>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          );
+      } catch (e) {
+          // Fallback to text editor if not JSON
+          return (
+            <Editor
+                height="100%"
+                defaultLanguage="markdown"
+                value={output}
+                theme="vs-dark"
+                options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
+            />
+          );
+      }
+  };
 
   return (
     <div className="absolute right-0 top-0 h-full w-[500px] bg-gray-900 border-l border-gray-800 shadow-2xl z-40 flex flex-col animate-slide-in">
@@ -406,6 +460,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
                             wordWrap: 'on'
                         }}
                      />
+                 ) : node.type === NodeType.GEMINI_CHECK ? (
+                    renderCheckResults(node.data.output || "")
                  ) : (
                     <Editor
                         height="100%"

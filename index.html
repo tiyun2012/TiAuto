@@ -8,6 +8,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
     <script>
+      // Polyfill process.env for browser environments to prevent ReferenceErrors
+      // You can place your API_KEY here if running locally without a build server.
+      if (typeof process === 'undefined') {
+        window.process = {
+          env: {
+            API_KEY: '' 
+          }
+        };
+      }
+
       tailwind.config = {
         theme: {
           extend: {

@@ -1,6 +1,6 @@
 
 import { Node, Edge, NodeType } from '../types';
-import { generateCode, checkCode, simulateExecution, generateUnitTests } from './geminiService';
+import { generateCode, checkCodeStructured, simulateExecution, generateUnitTests } from './geminiService';
 import { runPythonCode } from './pyodideService';
 import { executeShellCommand } from './commandService';
 import { parseOutputToFiles, formatFilesForPrompt } from './fileParsingService';
@@ -88,8 +88,10 @@ export const executeNode = async (
         // Check sees everything
         const checkCriteria = node.data.prompt || "Check for bugs and best practices.";
         const fullContext = `${vfsString}\n\n${textContext}`;
-        result = await checkCode(fullContext, checkCriteria);
-        extractedFiles = parseOutputToFiles(result); // Maybe it suggests a fixed file
+        
+        // Enhanced Structured Check
+        result = await checkCodeStructured(fullContext, checkCriteria);
+        // We do NOT parse extractedFiles from this JSON result
         break;
       
       case NodeType.AI_UNIT_TEST:
