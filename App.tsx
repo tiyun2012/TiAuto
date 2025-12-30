@@ -4,11 +4,11 @@ import Canvas from './components/Canvas';
 import Sidebar from './components/Sidebar';
 import PropertiesPanel from './components/PropertiesPanel';
 import JsonViewModal from './components/JsonViewModal';
-import { Node, Edge, INITIAL_NODES, INITIAL_EDGES, NodeType } from './types';
+import { Node, Edge, INITIAL_NODES, INITIAL_EDGES, NodeType, AISettings } from './types';
 import { executeNode } from './services/workflowEngine';
 import { refineCode } from './services/geminiService';
 import { parseOutputToFiles } from './services/fileParsingService';
-import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson } from 'lucide-react';
+import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson, Settings, Key } from 'lucide-react';
 import { APP_TEMPLATES, Template } from './data/templates';
 
 export default function App() {
@@ -21,6 +21,15 @@ export default function App() {
   const [isLoaded, setIsLoaded] = useState(false); // Track if initial load is done
   const [showTemplates, setShowTemplates] = useState(false);
   const [showJsonView, setShowJsonView] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // AI Settings
+  const [aiSettings, setAiSettings] = useState<AISettings>({
+      provider: 'gemini',
+      geminiKey: process.env.API_KEY || '',
+      deepseekKey: process.env.DEEPSEEK_API_KEY || '',
+      deepseekModel: 'deepseek-coder'
+  });
 
   // Hidden file input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -29,6 +38,7 @@ export default function App() {
 
   // 1. Load from LocalStorage on Mount
   useEffect(() => {
+    // Load Workflow
     const savedData = localStorage.getItem('flowgen-workflow-autosave');
     if (savedData) {
       try {
@@ -42,6 +52,17 @@ export default function App() {
         console.error("Failed to parse autosave", e);
       }
     }
+
+    // Load Settings
+    const savedSettings = localStorage.getItem('flowgen-ai-settings');
+    if (savedSettings) {
+        try {
+            const parsed = JSON.parse(savedSettings);
+            // Merge with default to ensure new keys exist
+            setAiSettings(prev => ({...prev, ...parsed}));
+        } catch(e) {}
+    }
+
     setIsLoaded(true);
   }, []);
 
@@ -56,6 +77,13 @@ export default function App() {
 
     return () => clearTimeout(timeoutId);
   }, [nodes, edges, isLoaded]);
+
+  // Save Settings when Changed
+  useEffect(() => {
+      if(isLoaded) {
+          localStorage.setItem('flowgen-ai-settings', JSON.stringify(aiSettings));
+      }
+  }, [aiSettings, isLoaded]);
 
   // --- File Operations ---
 
@@ -148,10 +176,7 @@ export default function App() {
 
   const handleAddNode = (type: NodeType, position?: { x: number; y: number }) => {
     const id = `${type.toLowerCase()}-${Date.now()}`;
-    // Use provided position or random near center
     const pos = position || { x: 300 + Math.random() * 50, y: 300 + Math.random() * 50 };
-    
-    // Default to square unless it's a Note
     const defaultShape = type === NodeType.NOTE ? 'rectangle' : 'square';
 
     const newNode: Node = {
@@ -203,10 +228,9 @@ export default function App() {
       setToast({ message: "Refining code...", type: 'info' });
       
       try {
-        // Optimistic Update
         handleUpdateNode(id, { status: 'running' });
         
-        const refinedCode = await refineCode(node.data.output, instructions);
+        const refinedCode = await refineCode(node.data.output, instructions, aiSettings);
         const extractedFiles = parseOutputToFiles(refinedCode);
         
         handleUpdateNode(id, { 
@@ -227,15 +251,7 @@ export default function App() {
 
   const executeGraph = async (startNodes: Node[]) => {
     setIsExecuting(true);
-    // Deep copy nodes for execution context to avoid closure staleness issues with state
     let currentNodes = [...nodes];
-    
-    // We only reset statuses of nodes downstream from startNodes, but for simplicity here we reset all that are 'pending' logic.
-    // Actually, n8n style usually re-runs everything or specific branches.
-    // Let's stick to: If we run specific node, we run it and its dependencies.
-    // If we run global, we run everything from triggers.
-    
-    // Logic moved to `runExecutionLoop` for reusability
     await runExecutionLoop(startNodes, currentNodes);
   };
 
@@ -244,9 +260,6 @@ export default function App() {
       const executed = new Set<string>();
       let executedCount = 0;
 
-      // Reset statuses for queued nodes and their descendants? 
-      // For now, assume UI handles visual reset before calling this if needed.
-
       while (queue.length > 0) {
         const currentNodeRef = queue.shift()!;
         const currentNode = currentNodes.find(n => n.id === currentNodeRef.id);
@@ -254,32 +267,21 @@ export default function App() {
 
         if (executed.has(currentNode.id)) continue;
 
-        // Dependency Check
         const parents = edges
             .filter(e => e.target === currentNode.id)
             .map(e => e.source);
         
-        // Check if parents have valid data (either executed in this run, or have existing success status)
         const allParentsReady = parents.every(pid => {
             const p = currentNodes.find(n => n.id === pid);
             return p && (executed.has(pid) || p.data.status === 'success');
         });
         
         if (!allParentsReady && parents.length > 0) {
-             // If parents aren't ready, we might need to find them and queue them?
-             // Or if we are running global flow, we wait. 
-             // If we are running Single Node, we check if parents have cached data.
-             
-             // Simple Logic: Re-queue to end if waiting. 
-             // Warning: Infinite loop if parent never executes. 
-             // We rely on topological sort or valid queueing.
-             
-             // For partial execution (Run Node), we assume parents are already run.
              continue; 
         }
 
-        // Execute
-        await executeNode(currentNode, currentNodes, edges, (id, data) => {
+        // Execute passing aiSettings
+        await executeNode(currentNode, currentNodes, edges, aiSettings, (id, data) => {
            currentNodes = currentNodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n);
            setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n));
         });
@@ -288,7 +290,6 @@ export default function App() {
         visited.add(currentNode.id);
         executedCount++;
 
-        // Add children to queue
         const childrenEdges = edges.filter(e => e.source === currentNode.id);
         childrenEdges.forEach(e => {
             const childNode = currentNodes.find(n => n.id === e.target);
@@ -308,10 +309,8 @@ export default function App() {
     console.log("Starting full workflow...");
     setToast({ message: "Workflow Started...", type: "info" });
     
-    // Reset all nodes to idle
     setNodes(prev => prev.map(n => ({ ...n, data: { ...n.data, status: 'idle', errorMessage: undefined } })));
     
-    // Allow state update to propagate
     setTimeout(async () => {
         try {
             const startNodes = nodes.filter(n => n.type === NodeType.TRIGGER);
@@ -327,26 +326,17 @@ export default function App() {
     }, 100);
   };
 
-  // Run Single Node (and its immediate logic)
   const handleRunNode = async (nodeId: string) => {
       if (isExecuting) return;
       setToast({ message: "Executing single node...", type: "info" });
       setIsExecuting(true);
 
       try {
-          // We do NOT reset all nodes. We use existing state of parents.
-          // We only reset the target node.
           setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status: 'idle', errorMessage: undefined } } : n));
           
           const targetNode = nodes.find(n => n.id === nodeId);
           if (!targetNode) throw new Error("Node not found");
 
-          // We pass [targetNode] as queue. 
-          // The engine logic checks parents. If parents have status='success', it proceeds.
-          // If parents are idle, it skips/waits (and eventually timeouts in this simple loop implementation, so we need to be careful).
-          
-          // Enhanced Single Run Logic:
-          // Check parents explicitly first.
           const parents = edges.filter(e => e.target === nodeId).map(e => nodes.find(n => n.id === e.source));
           const unreadyParents = parents.filter(p => p && p.data.status !== 'success');
           
@@ -354,13 +344,8 @@ export default function App() {
               throw new Error(`Cannot run node. Parent "${unreadyParents[0]?.data.label}" has not executed successfully yet.`);
           }
 
-          // Execute just this one node (queue doesn't add children automatically if we don't want it to?)
-          // actually runExecutionLoop ADDS children. 
-          // We want to run ONLY this node.
-          
-          // Let's use executeNode directly for single run
           let currentNodes = [...nodes];
-          await executeNode(targetNode, currentNodes, edges, (id, data) => {
+          await executeNode(targetNode, currentNodes, edges, aiSettings, (id, data) => {
                setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n));
           });
 
@@ -435,12 +420,15 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs text-gray-500">
-                    <span>Gemini Powered</span>
-                    <div className="flex items-center gap-1">
-                        <div className={`w-2 h-2 rounded-full ${process.env.API_KEY ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                        {process.env.API_KEY ? 'API Connected' : 'No API Key'}
-                    </div>
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <button 
+                        onClick={() => setShowSettings(true)}
+                        className={`flex items-center gap-2 px-2 py-1 rounded border border-gray-800 hover:bg-gray-800 transition-colors ${!aiSettings.geminiKey && !aiSettings.deepseekKey ? 'text-red-400 border-red-900/50' : ''}`}
+                    >
+                         <div className={`w-2 h-2 rounded-full ${(aiSettings.geminiKey || aiSettings.deepseekKey) ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                         <span>{aiSettings.provider === 'gemini' ? 'Gemini' : 'DeepSeek'}</span>
+                         <Settings className="w-3.5 h-3.5 ml-1" />
+                    </button>
                 </div>
             </div>
         </div>
@@ -468,7 +456,6 @@ export default function App() {
                 onRunNode={handleRunNode}
                 />
                 
-                {/* Empty State Helper */}
                 {nodes.length === 0 && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="text-gray-700 text-center">
@@ -537,8 +524,6 @@ export default function App() {
                                         ))}
                                     </div>
                                 </button>
-                                
-                                {/* Download Action */}
                                 <button
                                     onClick={(e) => { e.stopPropagation(); handleDownloadTemplate(t); }}
                                     className="absolute top-2 right-2 p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors opacity-0 group-hover:opacity-100"
@@ -548,9 +533,6 @@ export default function App() {
                                 </button>
                             </div>
                         ))}
-                    </div>
-                    <div className="p-4 bg-gray-950/50 text-xs text-gray-500 text-center border-t border-gray-800">
-                        Loading a template will replace your current canvas.
                     </div>
                 </div>
             </div>
@@ -562,6 +544,110 @@ export default function App() {
                 data={{ nodes, edges, version: 1 }} 
                 onClose={() => setShowJsonView(false)} 
             />
+        )}
+
+        {/* Settings Modal */}
+        {showSettings && (
+            <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center animate-in fade-in duration-200">
+                <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+                         <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <Settings className="w-5 h-5 text-gray-400" />
+                            AI Provider Settings
+                        </h2>
+                        <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-white">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="p-6 space-y-6">
+                        {/* Provider Select */}
+                        <div className="space-y-2">
+                             <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Active Provider</label>
+                             <div className="grid grid-cols-2 gap-2">
+                                 <button 
+                                    onClick={() => setAiSettings(s => ({...s, provider: 'gemini'}))}
+                                    className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                                        aiSettings.provider === 'gemini' 
+                                        ? 'bg-blue-600/20 border-blue-500 text-blue-400' 
+                                        : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-750'
+                                    }`}
+                                 >
+                                     Google Gemini
+                                 </button>
+                                 <button 
+                                    onClick={() => setAiSettings(s => ({...s, provider: 'deepseek'}))}
+                                    className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                                        aiSettings.provider === 'deepseek' 
+                                        ? 'bg-blue-600/20 border-blue-500 text-blue-400' 
+                                        : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-750'
+                                    }`}
+                                 >
+                                     DeepSeek
+                                 </button>
+                             </div>
+                        </div>
+
+                        {/* Gemini Config */}
+                        {aiSettings.provider === 'gemini' && (
+                             <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                                    <Key className="w-3 h-3" /> Gemini API Key
+                                </label>
+                                <input 
+                                    type="password"
+                                    value={aiSettings.geminiKey}
+                                    onChange={(e) => setAiSettings(s => ({...s, geminiKey: e.target.value}))}
+                                    placeholder="AIzaSy..."
+                                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                />
+                                <p className="text-[10px] text-gray-500">
+                                    Falls back to environment variable if empty.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* DeepSeek Config */}
+                        {aiSettings.provider === 'deepseek' && (
+                             <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                                        <Key className="w-3 h-3" /> DeepSeek API Key
+                                    </label>
+                                    <input 
+                                        type="password"
+                                        value={aiSettings.deepseekKey}
+                                        onChange={(e) => setAiSettings(s => ({...s, deepseekKey: e.target.value}))}
+                                        placeholder="sk-..."
+                                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                    />
+                                    <p className="text-[10px] text-gray-500">
+                                        Falls back to DEEPSEEK_API_KEY environment variable if empty.
+                                    </p>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Model</label>
+                                    <select
+                                        value={aiSettings.deepseekModel}
+                                        onChange={(e) => setAiSettings(s => ({...s, deepseekModel: e.target.value}))}
+                                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                    >
+                                        <option value="deepseek-coder">deepseek-coder (Recommended)</option>
+                                        <option value="deepseek-chat">deepseek-chat</option>
+                                    </select>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="p-4 bg-gray-950 border-t border-gray-800 flex justify-end">
+                        <button 
+                            onClick={() => setShowSettings(false)}
+                            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                        >
+                            Done
+                        </button>
+                    </div>
+                </div>
+            </div>
         )}
 
         {/* Toast Notification */}

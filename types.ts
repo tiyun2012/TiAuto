@@ -57,6 +57,15 @@ export interface WorkflowState {
   isExecuting: boolean;
 }
 
+export type AIProvider = 'gemini' | 'deepseek';
+
+export interface AISettings {
+  provider: AIProvider;
+  geminiKey: string;
+  deepseekKey: string;
+  deepseekModel: string; // e.g., 'deepseek-coder' or 'deepseek-chat'
+}
+
 export const INITIAL_NODES: Node[] = [
   {
     id: 'start-1',

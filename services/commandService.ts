@@ -1,4 +1,5 @@
 import { generateCode } from './geminiService';
+import { AISettings } from '../types';
 
 // Type definition for a potential Electron/Desktop bridge
 declare global {
@@ -11,6 +12,7 @@ declare global {
 
 export const executeShellCommand = async (
   command: string, 
+  settings: AISettings,
   context: string = "", 
   useAiSimulation: boolean = true
 ): Promise<string> => {
@@ -50,7 +52,7 @@ export const executeShellCommand = async (
     `;
     
     // We reuse generateCode from geminiService as it fits the "Text-to-Text" pattern
-    return await generateCode(prompt, "You are a terminal emulator. Output raw logs only.");
+    return await generateCode(prompt, "You are a terminal emulator. Output raw logs only.", settings);
   } else {
     // Static Message
     return `[System] Browser Environment Detected.

@@ -1,5 +1,5 @@
 
-import { Node, Edge, NodeType } from '../types';
+import { Node, Edge, NodeType, AISettings } from '../types';
 import { generateCode, checkCodeStructured, simulateExecution, generateUnitTests } from './geminiService';
 import { runPythonCode } from './pyodideService';
 import { executeShellCommand } from './commandService';
@@ -12,7 +12,6 @@ const getParentNodes = (nodeId: string, nodes: Node[], edges: Edge[]): Node[] =>
 };
 
 // Helper to accumulate context from parent nodes (For AI Prompts)
-// NOW ENHANCED: Collects FILES from parents first, then text output.
 const getContextFromParents = (parents: Node[]): { textContext: string, fileContext: Record<string, string> } => {
   let textContext = "";
   let fileContext: Record<string, string> = {};
@@ -24,8 +23,6 @@ const getContextFromParents = (parents: Node[]): { textContext: string, fileCont
     }
     
     // 2. Gather Text Output (Legacy/Analysis nodes)
-    // Only add text output if it's NOT just a single file we already captured in 'files'
-    // or if the node is specifically a note/check/trigger
     let content = "";
     if (p.data.output) {
         content = `Output from ${p.data.label}:\n${p.data.output}`;
@@ -44,6 +41,7 @@ export const executeNode = async (
   node: Node, 
   allNodes: Node[], 
   allEdges: Edge[],
+  aiSettings: AISettings,
   updateNodeData: (id: string, data: Partial<Node['data']>) => void
 ): Promise<void> => {
   
@@ -71,13 +69,9 @@ export const executeNode = async (
       case NodeType.GEMINI_GENERATE:
         // Pass existing files + text context + instructions
         const genPrompt = `${vfsString}\n${textContext}\n\nTask: ${node.data.prompt || 'Generate code based on previous context.'}`;
-        
-        // Append instruction to force file format if we suspect multi-file need
         const fileInstruction = "If creating multiple files, separate them with '### filename.ext' header.";
         
-        result = await generateCode(genPrompt, (node.data.systemInstruction || "") + " " + fileInstruction);
-        
-        // Auto-Parse Files
+        result = await generateCode(genPrompt, (node.data.systemInstruction || "") + " " + fileInstruction, aiSettings);
         extractedFiles = parseOutputToFiles(result);
         break;
 
@@ -85,13 +79,10 @@ export const executeNode = async (
         if (!vfsString.trim() && !textContext.trim()) {
           throw new Error("No input code found from previous nodes to check.");
         }
-        // Check sees everything
         const checkCriteria = node.data.prompt || "Check for bugs and best practices.";
         const fullContext = `${vfsString}\n\n${textContext}`;
         
-        // Enhanced Structured Check
-        result = await checkCodeStructured(fullContext, checkCriteria);
-        // We do NOT parse extractedFiles from this JSON result
+        result = await checkCodeStructured(fullContext, checkCriteria, aiSettings);
         break;
       
       case NodeType.AI_UNIT_TEST:
@@ -100,7 +91,7 @@ export const executeNode = async (
         }
         const testContext = `${vfsString}\n\n${textContext}`;
         const instructions = node.data.prompt || "Write unit tests for the provided code.";
-        result = await generateUnitTests(testContext, instructions);
+        result = await generateUnitTests(testContext, instructions, aiSettings);
         extractedFiles = parseOutputToFiles(result);
         break;
 
@@ -109,27 +100,24 @@ export const executeNode = async (
             throw new Error("No code found to simulate.");
          }
          const simContext = `${vfsString}\n\n${textContext}`;
-         result = await simulateExecution(simContext);
+         result = await simulateExecution(simContext, aiSettings);
          break;
       
       case NodeType.SHELL_EXEC:
          const command = node.data.prompt || "echo 'No command'";
          const shellContext = `${vfsString}\n\n${textContext}`;
-         result = await executeShellCommand(command, shellContext, node.data.useAiSimulation ?? true);
+         result = await executeShellCommand(command, aiSettings, shellContext, node.data.useAiSimulation ?? true);
          break;
 
       case NodeType.PYTHON_EXEC:
-         // PRIORITIZE: Files from VFS
          const codeParts: string[] = [];
          
-         // 1. Gather all python files from context
          Object.entries(fileContext).forEach(([fname, content]) => {
              if (fname.endsWith('.py')) {
                  codeParts.push(`# File: ${fname}\n${content}`);
              }
          });
          
-         // 2. Fallback to raw output if VFS is empty
          if (codeParts.length === 0 && textContext) {
              const match = textContext.match(/```(?:python)?\s*([\s\S]*?)\s*```/);
              if (match) codeParts.push(match[1]);
@@ -153,7 +141,6 @@ export const executeNode = async (
       case NodeType.VS_CODE:
         const path = node.data.prompt?.trim();
         if (!path) throw new Error("No file path specified.");
-        // VS Code logic remains similar, mostly signal based
         let launchMsg = `Attempting to open VS Code at: ${path}`;
         try {
             const url = `vscode://file/${path}`;
@@ -172,16 +159,13 @@ export const executeNode = async (
         break;
       
       case NodeType.DIFF:
-        // Diff Logic: Compare parents
         if (parents.length === 0) {
-            // No parents? Compare manual prompt vs empty
              updateNodeData(node.id, { 
                 diffOriginal: node.data.prompt || "",
                 diffModified: "" 
              });
              result = "Warning: No input nodes to compare.";
         } else if (parents.length === 1) {
-            // 1 Parent: Compare Manual (Left) vs Parent Output (Right)
             const parentOut = parents[0].data.output || parents[0].data.code || "";
             updateNodeData(node.id, { 
                 diffOriginal: node.data.prompt || "",
@@ -189,8 +173,6 @@ export const executeNode = async (
              });
              result = "Diff computed: Static Text (Original) vs Input Node (Modified).";
         } else {
-            // >= 2 Parents: Compare Parent 1 (Left) vs Parent 2 (Right)
-            // Use connection order if possible, or just index
             const original = parents[0].data.output || parents[0].data.code || "";
             const modified = parents[1].data.output || parents[1].data.code || "";
             
@@ -206,14 +188,6 @@ export const executeNode = async (
         result = node.data.prompt || "Note";
         break;
     }
-
-    // Merge new files with existing file context? 
-    // Usually a node produces its own set of files, but conceptually 
-    // it might be nice to say "This node outputs these files".
-    // We update the node's data.files.
-    
-    // If extractedFiles is empty but we have result, maybe result IS a file (if python exec output)
-    // We generally leave files undefined if not explicitly parsed, unless it's a generator.
     
     updateNodeData(node.id, { 
         status: 'success', 
