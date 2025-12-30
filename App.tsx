@@ -6,6 +6,8 @@ import PropertiesPanel from './components/PropertiesPanel';
 import JsonViewModal from './components/JsonViewModal';
 import { Node, Edge, INITIAL_NODES, INITIAL_EDGES, NodeType } from './types';
 import { executeNode } from './services/workflowEngine';
+import { refineCode } from './services/geminiService';
+import { parseOutputToFiles } from './services/fileParsingService';
 import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson } from 'lucide-react';
 import { APP_TEMPLATES, Template } from './data/templates';
 
@@ -179,64 +181,92 @@ export default function App() {
       setEdges(prev => prev.filter(e => e.id !== id));
   };
 
+  // --- Rich Feature: AI Refinement ---
+  const handleRefineNode = async (id: string, instructions: string) => {
+      const node = nodes.find(n => n.id === id);
+      if (!node || !node.data.output) return;
+
+      setToast({ message: "Refining code...", type: 'info' });
+      
+      try {
+        // Optimistic Update
+        handleUpdateNode(id, { status: 'running' });
+        
+        const refinedCode = await refineCode(node.data.output, instructions);
+        const extractedFiles = parseOutputToFiles(refinedCode);
+        
+        handleUpdateNode(id, { 
+            status: 'success', 
+            output: refinedCode,
+            files: Object.keys(extractedFiles).length > 0 ? extractedFiles : undefined
+        });
+        setToast({ message: "Code refined successfully.", type: 'success' });
+
+      } catch (error: any) {
+        setToast({ message: "Refinement failed: " + error.message, type: 'error' });
+        handleUpdateNode(id, { status: 'error', errorMessage: error.message });
+      }
+  };
+
+
   // --- Execution Engine ---
 
-  const handleRunWorkflow = async () => {
-    if (isExecuting) return;
-    
-    console.log("Starting workflow...");
+  const executeGraph = async (startNodes: Node[]) => {
     setIsExecuting(true);
-    setToast({ message: "Workflow Started...", type: "info" });
+    // Deep copy nodes for execution context to avoid closure staleness issues with state
+    let currentNodes = [...nodes];
+    
+    // We only reset statuses of nodes downstream from startNodes, but for simplicity here we reset all that are 'pending' logic.
+    // Actually, n8n style usually re-runs everything or specific branches.
+    // Let's stick to: If we run specific node, we run it and its dependencies.
+    // If we run global, we run everything from triggers.
+    
+    // Logic moved to `runExecutionLoop` for reusability
+    await runExecutionLoop(startNodes, currentNodes);
+  };
 
-    // Reset statuses
-    // Create a local copy of nodes to track state updates synchronously during execution loop
-    let currentNodes = nodes.map(n => ({ 
-        ...n, 
-        data: { ...n.data, status: 'idle', output: undefined, errorMessage: undefined } 
-    })) as Node[];
-
-    // Sync UI with initial reset state
-    setNodes(currentNodes);
-
-    try {
-      // 1. Identify start nodes (triggers)
-      const startNodes = currentNodes.filter(n => n.type === NodeType.TRIGGER);
-      if (startNodes.length === 0) throw new Error("No Start Trigger found. Add a Trigger node.");
-
-      // 2. Simple Topological Execution (BFS)
-      const queue = [...startNodes];
+  const runExecutionLoop = async (queue: Node[], currentNodes: Node[]) => {
       const visited = new Set<string>();
       const executed = new Set<string>();
       let executedCount = 0;
 
+      // Reset statuses for queued nodes and their descendants? 
+      // For now, assume UI handles visual reset before calling this if needed.
+
       while (queue.length > 0) {
         const currentNodeRef = queue.shift()!;
-        
-        // Always fetch the freshest version of the node from our local state
         const currentNode = currentNodes.find(n => n.id === currentNodeRef.id);
         if (!currentNode) continue;
 
         if (executed.has(currentNode.id)) continue;
 
-        // Check if all parents have executed
+        // Dependency Check
         const parents = edges
             .filter(e => e.target === currentNode.id)
             .map(e => e.source);
         
-        const allParentsExecuted = parents.every(pid => executed.has(pid));
+        // Check if parents have valid data (either executed in this run, or have existing success status)
+        const allParentsReady = parents.every(pid => {
+            const p = currentNodes.find(n => n.id === pid);
+            return p && (executed.has(pid) || p.data.status === 'success');
+        });
         
-        if (!allParentsExecuted && parents.length > 0) {
-            // Re-queue to end if waiting for dependencies
-            queue.push(currentNode);
-            continue; 
+        if (!allParentsReady && parents.length > 0) {
+             // If parents aren't ready, we might need to find them and queue them?
+             // Or if we are running global flow, we wait. 
+             // If we are running Single Node, we check if parents have cached data.
+             
+             // Simple Logic: Re-queue to end if waiting. 
+             // Warning: Infinite loop if parent never executes. 
+             // We rely on topological sort or valid queueing.
+             
+             // For partial execution (Run Node), we assume parents are already run.
+             continue; 
         }
 
-        // Execute current node using the LOCAL currentNodes array (which contains outputs from previous steps)
+        // Execute
         await executeNode(currentNode, currentNodes, edges, (id, data) => {
-           // Update Local State (Logic)
            currentNodes = currentNodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n);
-           
-           // Update UI State (Visual)
            setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n));
         });
         
@@ -253,18 +283,80 @@ export default function App() {
             }
         });
         
-        // Small delay for visual effect
         await new Promise(r => setTimeout(r, 600));
       }
+      return executedCount;
+  };
 
-      setToast({ message: `Workflow Completed. (${executedCount} nodes run)`, type: "success" });
+  const handleRunWorkflow = async () => {
+    if (isExecuting) return;
+    
+    console.log("Starting full workflow...");
+    setToast({ message: "Workflow Started...", type: "info" });
+    
+    // Reset all nodes to idle
+    setNodes(prev => prev.map(n => ({ ...n, data: { ...n.data, status: 'idle', errorMessage: undefined } })));
+    
+    // Allow state update to propagate
+    setTimeout(async () => {
+        try {
+            const startNodes = nodes.filter(n => n.type === NodeType.TRIGGER);
+            if (startNodes.length === 0) throw new Error("No Start Trigger found.");
+            
+            const count = await executeGraph(startNodes);
+            setToast({ message: `Workflow Completed. (${count} nodes)`, type: "success" });
+        } catch (error: any) {
+            setToast({ message: error.message, type: "error" });
+        } finally {
+            setIsExecuting(false);
+        }
+    }, 100);
+  };
 
-    } catch (error: any) {
-      console.error("Workflow halted:", error);
-      setToast({ message: error.message || "Workflow Failed", type: "error" });
-    } finally {
-      setIsExecuting(false);
-    }
+  // Run Single Node (and its immediate logic)
+  const handleRunNode = async (nodeId: string) => {
+      if (isExecuting) return;
+      setToast({ message: "Executing single node...", type: "info" });
+      setIsExecuting(true);
+
+      try {
+          // We do NOT reset all nodes. We use existing state of parents.
+          // We only reset the target node.
+          setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status: 'idle', errorMessage: undefined } } : n));
+          
+          const targetNode = nodes.find(n => n.id === nodeId);
+          if (!targetNode) throw new Error("Node not found");
+
+          // We pass [targetNode] as queue. 
+          // The engine logic checks parents. If parents have status='success', it proceeds.
+          // If parents are idle, it skips/waits (and eventually timeouts in this simple loop implementation, so we need to be careful).
+          
+          // Enhanced Single Run Logic:
+          // Check parents explicitly first.
+          const parents = edges.filter(e => e.target === nodeId).map(e => nodes.find(n => n.id === e.source));
+          const unreadyParents = parents.filter(p => p && p.data.status !== 'success');
+          
+          if (unreadyParents.length > 0) {
+              throw new Error(`Cannot run node. Parent "${unreadyParents[0]?.data.label}" has not executed successfully yet.`);
+          }
+
+          // Execute just this one node (queue doesn't add children automatically if we don't want it to?)
+          // actually runExecutionLoop ADDS children. 
+          // We want to run ONLY this node.
+          
+          // Let's use executeNode directly for single run
+          let currentNodes = [...nodes];
+          await executeNode(targetNode, currentNodes, edges, (id, data) => {
+               setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n));
+          });
+
+          setToast({ message: "Node Executed.", type: "success" });
+
+      } catch (error: any) {
+          setToast({ message: error.message, type: "error" });
+      } finally {
+          setIsExecuting(false);
+      }
   };
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId) || null;
@@ -359,6 +451,7 @@ export default function App() {
                 addNode={handleAddNode}
                 onDeleteNode={handleDeleteNode}
                 onDeleteEdge={handleDeleteEdge}
+                onRunNode={handleRunNode}
                 />
                 
                 {/* Empty State Helper */}
@@ -398,6 +491,7 @@ export default function App() {
             onUpdateNode={handleUpdateNode}
             onDeleteNode={handleDeleteNode}
             onClose={() => setSelectedNodeId(null)}
+            onRefineNode={handleRefineNode}
           />
         )}
 

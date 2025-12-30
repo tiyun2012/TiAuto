@@ -15,6 +15,7 @@ interface CanvasProps {
   addNode: (type: NodeType, position: { x: number; y: number }) => void;
   onDeleteNode: (id: string) => void;
   onDeleteEdge: (id: string) => void;
+  onRunNode: (id: string) => void; // New prop for single node execution
 }
 
 // Node definitions for the picker
@@ -38,7 +39,7 @@ type ContextMenuType =
   | { type: 'edge'; id: string; x: number; y: number };
 
 const Canvas: React.FC<CanvasProps> = ({ 
-  nodes, edges, onNodesChange, onEdgesChange, onSelectNode, selectedNodeId, addNode, onDeleteNode, onDeleteEdge 
+  nodes, edges, onNodesChange, onEdgesChange, onSelectNode, selectedNodeId, addNode, onDeleteNode, onDeleteEdge, onRunNode 
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   
@@ -470,6 +471,7 @@ const Canvas: React.FC<CanvasProps> = ({
                     onContextMenu={handleNodeContextMenu}
                     onPortMouseDown={handlePortMouseDown}
                     onPortMouseUp={handlePortMouseUp}
+                    onRunNode={onRunNode} 
                 />
             ))}
           </div>

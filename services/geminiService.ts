@@ -30,6 +30,36 @@ export const generateCode = async (prompt: string, systemInstruction?: string): 
   }
 };
 
+export const refineCode = async (originalCode: string, instructions: string): Promise<string> => {
+    if (!API_KEY) throw new Error("API Key is missing");
+  
+    try {
+      const prompt = `
+        ORIGINAL CONTENT:
+        ${originalCode}
+  
+        REFINEMENT INSTRUCTIONS:
+        ${instructions}
+  
+        TASK:
+        Rewrite the content based strictly on the instructions. Keep the same format (e.g., file separators) if present.
+      `;
+  
+      const response = await ai.models.generateContent({
+        model: CODE_MODEL,
+        contents: prompt,
+        config: {
+          systemInstruction: "You are an expert code refactorer. Output only the updated code.",
+          temperature: 0.2,
+        },
+      });
+      return response.text || "No response generated.";
+    } catch (error: any) {
+      console.error("Gemini Refine Error:", error);
+      throw new Error(error.message || "Failed to refine code.");
+    }
+  };
+
 export const generateUnitTests = async (context: string, instructions: string): Promise<string> => {
   if (!API_KEY) throw new Error("API Key is missing");
 

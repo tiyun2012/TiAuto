@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown } from 'lucide-react';
+import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2 } from 'lucide-react';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 
 interface PropertiesPanelProps {
@@ -9,10 +9,13 @@ interface PropertiesPanelProps {
   onUpdateNode: (id: string, data: any) => void;
   onDeleteNode: (id: string) => void;
   onClose: () => void;
+  onRefineNode?: (id: string, instructions: string) => void; // New prop for refinement
 }
 
-const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, onDeleteNode, onClose }) => {
+const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, onDeleteNode, onClose, onRefineNode }) => {
   const [activeFile, setActiveFile] = useState<string | null>(null);
+  const [refinementInput, setRefinementInput] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
 
   // Set default active file when node selection changes or output changes
   useEffect(() => {
@@ -48,8 +51,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
     return 'markdown';
   };
 
+  const handleRefine = () => {
+      if (!onRefineNode || !refinementInput.trim()) return;
+      setIsRefining(true);
+      onRefineNode(node.id, refinementInput);
+      setRefinementInput(""); // Clear input
+      setTimeout(() => setIsRefining(false), 2000); // Visual feedback reset
+  };
+
   const currentShape = node.data.shape || 'rectangle';
   const hasMultipleFiles = node.data.files && Object.keys(node.data.files).length > 0;
+  const isGenerative = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.AI_UNIT_TEST].includes(node.type);
 
   return (
     <div className="absolute right-0 top-0 h-full w-[500px] bg-gray-900 border-l border-gray-800 shadow-2xl z-40 flex flex-col animate-slide-in">
@@ -310,10 +322,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
 
         {/* Output Display */}
         {node.data.output && (
-          <div className="space-y-2 flex flex-col h-80 border-t border-gray-800 pt-4">
+          <div className="space-y-2 flex flex-col h-80 border-t border-gray-800 pt-4 animate-in fade-in">
             <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-green-500 uppercase tracking-wider">
+                <label className="text-xs font-bold text-green-500 uppercase tracking-wider flex items-center gap-2">
                     {node.type === NodeType.DIFF ? 'Comparison Result' : 'Result'}
+                    {isRefining && <span className="text-gray-400 font-normal normal-case animate-pulse">Refining...</span>}
                 </label>
                 
                 {node.type !== NodeType.DIFF && (
@@ -331,6 +344,30 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onUpdateNode, o
                     </div>
                 )}
             </div>
+
+            {/* AI Refinement UI (Rich Feature) */}
+            {isGenerative && onRefineNode && (
+                <div className="bg-gray-800/50 p-2 rounded-lg border border-gray-700 space-y-2">
+                    <div className="flex gap-2">
+                         <input 
+                            type="text" 
+                            className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:ring-1 focus:ring-purple-500 focus:outline-none placeholder-gray-500"
+                            placeholder="Instruction: e.g. Fix syntax error, use async/await..."
+                            value={refinementInput}
+                            onChange={(e) => setRefinementInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
+                         />
+                         <button 
+                            onClick={handleRefine}
+                            disabled={isRefining || !refinementInput.trim()}
+                            className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                         >
+                            <Wand2 className="w-3 h-3" />
+                            Refine
+                         </button>
+                    </div>
+                </div>
+            )}
 
             {/* File Tabs (If Multiple Files) */}
             {hasMultipleFiles && (

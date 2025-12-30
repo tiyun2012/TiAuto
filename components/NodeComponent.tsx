@@ -11,6 +11,7 @@ interface NodeComponentProps {
   onContextMenu: (e: React.MouseEvent, id: string) => void;
   onPortMouseDown: (e: React.MouseEvent, nodeId: string, handle: string) => void;
   onPortMouseUp: (e: React.MouseEvent, nodeId: string, handle: string) => void;
+  onRunNode: (id: string) => void;
 }
 
 // Updated Port Positioning: 
@@ -24,7 +25,7 @@ const PORTS = [
 ];
 
 const NodeComponent: React.FC<NodeComponentProps> = ({ 
-    node, isSelected, onMouseDown, onContextMenu, onPortMouseDown, onPortMouseUp 
+    node, isSelected, onMouseDown, onContextMenu, onPortMouseDown, onPortMouseUp, onRunNode 
 }) => {
   const { type, data, id } = node;
   const shape: NodeShape = data.shape || 'square';
@@ -143,6 +144,25 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
     if (data.status === 'error') return <AlertCircle className="w-4 h-4 text-red-500 bg-gray-900 rounded-full" />;
     return null;
   };
+
+  // Run Button overlay (Visible on Group Hover)
+  const renderRunButton = () => {
+      if (isNote || data.status === 'running') return null;
+      
+      // Different positioning based on shape
+      let btnClass = "absolute -top-4 -right-4"; 
+      if (shape === 'circle') btnClass = "absolute -top-1 -right-1";
+
+      return (
+        <button
+            onClick={(e) => { e.stopPropagation(); onRunNode(id); }}
+            className={`${btnClass} z-50 p-2 rounded-full bg-green-600 text-white shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:scale-110 hover:bg-green-500`}
+            title="Execute Node"
+        >
+            <Play className="w-3 h-3 fill-current" />
+        </button>
+      );
+  };
   
   // Corner Badge for AI/Logic (Square/Circle only)
   const renderCornerBadge = () => {
@@ -225,7 +245,11 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                  {!isNote && (
                      <button 
                         onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
-                        className={`absolute top-2 right-2 z-30 p-1.5 rounded-full bg-gray-900 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shadow-sm ${showPopup ? 'text-blue-400 border-blue-500/50' : ''}`}
+                        className={`absolute top-3 right-3 z-30 p-1.5 rounded-full bg-gray-900 border transition-colors shadow-sm ${
+                            showPopup 
+                            ? `${titleColor} ${borderClass}` 
+                            : `text-gray-500 border-transparent hover:${titleColor} hover:bg-gray-800`
+                        }`}
                      >
                          {showPopup ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                      </button>
@@ -260,7 +284,11 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                   {!isNote && (
                      <button 
                         onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
-                        className={`absolute top-2 right-2 z-30 p-1.5 rounded-md bg-gray-900/40 border border-gray-700/30 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shadow-sm backdrop-blur-sm ${showPopup ? 'text-blue-400 border-blue-500/50 bg-blue-900/20' : ''}`}
+                        className={`absolute top-1 right-1 z-30 p-1.5 rounded-lg bg-gray-900/80 border transition-all duration-200 shadow-sm backdrop-blur-sm ${
+                            showPopup 
+                            ? `${titleColor} ${borderClass}` 
+                            : `text-gray-500 border-transparent hover:${titleColor} hover:bg-gray-800`
+                        }`}
                      >
                          {showPopup ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                      </button>
@@ -299,7 +327,11 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                     {!isNote && (
                          <button 
                             onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
-                            className={`p-1 rounded hover:bg-gray-700/50 text-gray-400 hover:text-white transition-colors ${showPopup ? 'text-blue-400 bg-blue-500/10' : ''}`}
+                            className={`p-1 rounded transition-colors ${
+                                showPopup 
+                                ? `${titleColor} bg-gray-800` 
+                                : `text-gray-500 hover:${titleColor} hover:bg-gray-800`
+                            }`}
                             title={showPopup ? "Close View" : "Quick View"}
                          >
                             {showPopup ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -331,6 +363,9 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       onMouseDown={(e) => onMouseDown(e, node.id)}
       onContextMenu={(e) => onContextMenu(e, node.id)}
     >
+      {/* Run Button (n8n style) */}
+      {renderRunButton()}
+
       {/* 4 Ports */}
       {/* Socket Style: bg-gray-950 (Canvas color) + Border-2 (Node Color) + Inner Dot */}
       {/* We use explicit flex centering for the inner dot */}
