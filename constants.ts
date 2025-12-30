@@ -11,6 +11,7 @@ export const NODE_DIMENSIONS = {
 export const NODE_BORDER_WIDTH = 2; // px
 
 // Helper to get absolute port coordinates
+// This calculates the geometric point on the border where the wire should attach.
 export const getPortPosition = (
   nodeX: number, 
   nodeY: number, 
@@ -22,22 +23,20 @@ export const getPortPosition = (
   const w = dims.width;
   const h = dims.height; 
 
-  // Special case for Note in rectangle mode which overrides height in CSS
-  // This logic is approximate for wire drawing on Notes.
-  // Ideally, we'd pass the actual height here, but for now we assume standard dims.
-  
   const centerX = nodeX + w / 2;
   const centerY = nodeY + h / 2;
 
-  // Circle Logic
+  // With ports positioned via CSS as 'top: 0' (centered on the bounding edge),
+  // the center of the port is exactly on the geometry lines.
+
   if (shape === 'circle') {
-    const radius = w / 2;
+     // For circle, we approximate the cardinal points.
     switch (handle) {
       case 'top': return { x: centerX, y: nodeY };
       case 'bottom': return { x: centerX, y: nodeY + h };
       case 'left': return { x: nodeX, y: centerY };
       case 'right': return { x: nodeX + w, y: centerY };
-      default: return { x: nodeX + w, y: centerY }; // Default right
+      default: return { x: nodeX + w, y: centerY }; 
     }
   }
 

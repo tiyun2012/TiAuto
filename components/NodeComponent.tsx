@@ -13,11 +13,13 @@ interface NodeComponentProps {
   onPortMouseUp: (e: React.MouseEvent, nodeId: string, handle: string) => void;
 }
 
+// Updated Port Positioning: Centered exactly on the bounding box edge (0 offset)
+// This ensures the "socket" (bg-gray-950) sits exactly half-in/half-out, creating a perfect cutout.
 const PORTS = [
-    { id: 'top', className: '-top-1.5 left-1/2 -translate-x-1/2' },
-    { id: 'right', className: 'top-1/2 -right-1.5 -translate-y-1/2' },
-    { id: 'bottom', className: '-bottom-1.5 left-1/2 -translate-x-1/2' },
-    { id: 'left', className: 'top-1/2 -left-1.5 -translate-y-1/2' }
+    { id: 'top', className: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2' },
+    { id: 'right', className: 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2' },
+    { id: 'bottom', className: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2' },
+    { id: 'left', className: 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2' }
 ];
 
 const NodeComponent: React.FC<NodeComponentProps> = ({ 
@@ -32,9 +34,11 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   const [showPopup, setShowPopup] = useState(false);
 
   let Icon = FileCode;
-  let colorClass = "border-blue-500 bg-gray-800";
+  // Breakdown colors for granular control (Port border must match Node border)
+  let bgClass = "bg-gray-800";
+  let borderClass = "border-blue-500";
   let titleColor = "text-blue-400";
-  let portColor = "bg-blue-500 hover:bg-blue-400 shadow-blue-500/50"; 
+  let portColor = "bg-blue-500"; 
 
   // Categorize
   const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST].includes(type);
@@ -44,61 +48,71 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   switch (type) {
     case NodeType.TRIGGER:
       Icon = Play;
-      colorClass = "border-green-500 bg-gray-800";
+      bgClass = "bg-gray-800";
+      borderClass = "border-green-500";
       titleColor = "text-green-400";
-      portColor = "bg-green-500 hover:bg-green-400 shadow-green-500/50";
+      portColor = "bg-green-500";
       break;
     case NodeType.GEMINI_GENERATE:
       Icon = FileCode;
-      colorClass = "border-purple-500 bg-gray-800";
+      bgClass = "bg-gray-800";
+      borderClass = "border-purple-500";
       titleColor = "text-purple-400";
-      portColor = "bg-purple-500 hover:bg-purple-400 shadow-purple-500/50";
+      portColor = "bg-purple-500";
       break;
     case NodeType.GEMINI_CHECK:
       Icon = ShieldCheck;
-      colorClass = "border-orange-500 bg-gray-800";
+      bgClass = "bg-gray-800";
+      borderClass = "border-orange-500";
       titleColor = "text-orange-400";
-      portColor = "bg-orange-500 hover:bg-orange-400 shadow-orange-500/50";
+      portColor = "bg-orange-500";
       break;
     case NodeType.AI_UNIT_TEST:
       Icon = FlaskConical;
-      colorClass = "border-cyan-500 bg-gray-800";
+      bgClass = "bg-gray-800";
+      borderClass = "border-cyan-500";
       titleColor = "text-cyan-400";
-      portColor = "bg-cyan-500 hover:bg-cyan-400 shadow-cyan-500/50";
+      portColor = "bg-cyan-500";
       break;
     case NodeType.SIMULATE_RUN:
       Icon = Terminal;
-      colorClass = "border-pink-500 bg-gray-800";
+      bgClass = "bg-gray-800";
+      borderClass = "border-pink-500";
       titleColor = "text-pink-400";
-      portColor = "bg-pink-500 hover:bg-pink-400 shadow-pink-500/50";
+      portColor = "bg-pink-500";
       break;
     case NodeType.SHELL_EXEC:
       Icon = SquareTerminal;
-      colorClass = "border-gray-500 bg-gray-900";
+      bgClass = "bg-gray-900";
+      borderClass = "border-gray-500";
       titleColor = "text-gray-300";
-      portColor = "bg-gray-400 hover:bg-gray-200 shadow-gray-500/50";
+      portColor = "bg-gray-400";
       break;
     case NodeType.PYTHON_EXEC:
       Icon = Binary;
-      colorClass = "border-yellow-600 bg-gray-800";
+      bgClass = "bg-gray-800";
+      borderClass = "border-yellow-600";
       titleColor = "text-yellow-500";
-      portColor = "bg-yellow-500 hover:bg-yellow-400 shadow-yellow-500/50";
+      portColor = "bg-yellow-500";
       break;
     case NodeType.TODO_LIST:
       Icon = ListTodo;
-      colorClass = "border-teal-500 bg-gray-800";
+      bgClass = "bg-gray-800";
+      borderClass = "border-teal-500";
       titleColor = "text-teal-400";
-      portColor = "bg-teal-500 hover:bg-teal-400 shadow-teal-500/50";
+      portColor = "bg-teal-500";
       break;
     case NodeType.VS_CODE:
       Icon = Laptop;
-      colorClass = "border-blue-400 bg-gray-800";
+      bgClass = "bg-gray-800";
+      borderClass = "border-blue-400";
       titleColor = "text-blue-300";
-      portColor = "bg-blue-400 hover:bg-blue-300 shadow-blue-500/50";
+      portColor = "bg-blue-400";
       break;
     case NodeType.NOTE:
       Icon = StickyNote;
-      colorClass = "border-yellow-200 bg-yellow-100 text-yellow-900";
+      bgClass = "bg-yellow-100 text-yellow-900";
+      borderClass = "border-yellow-200";
       titleColor = "text-yellow-800";
       portColor = "bg-yellow-500";
       break;
@@ -109,9 +123,10 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   if (shape === 'circle') shapeClasses = 'rounded-full';
   if (shape === 'square') shapeClasses = 'rounded-2xl'; // Slightly rounded square
 
+  // Base Node Classes
   const baseClasses = `absolute shadow-lg border-2 transition-shadow duration-200 cursor-move group select-none ${
     isSelected ? 'ring-2 ring-white/50 z-20' : 'z-10'
-  } ${isNote ? colorClass : colorClass} ${shapeClasses}`;
+  } ${bgClass} ${borderClass} ${shapeClasses}`;
 
   // Status Indicator
   const renderStatus = () => {
@@ -265,22 +280,23 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
         left: node.position.x, 
         top: node.position.y,
         width: width,
-        height: isNote && shape === 'rectangle' ? 140 : height, // Force taller height for Notes if rectangle
+        height: isNote && shape === 'rectangle' ? 140 : height,
         boxSizing: 'border-box'
       }}
       onMouseDown={(e) => onMouseDown(e, node.id)}
       onContextMenu={(e) => onContextMenu(e, node.id)}
     >
       {/* 4 Ports */}
+      {/* Socket Style: bg-gray-950 (Canvas color) + Border-2 (Node Color) + Inner Dot */}
       {type !== NodeType.NOTE && PORTS.map(port => (
           <div
             key={port.id}
-            className={`absolute w-3.5 h-3.5 rounded-full border border-gray-900/20 hover:scale-125 cursor-crosshair z-30 transition-all duration-200 ${portColor} ${port.className}`}
+            className={`absolute w-4 h-4 rounded-full bg-gray-950 border-2 ${borderClass} hover:scale-125 cursor-crosshair z-30 transition-all duration-200 flex items-center justify-center ${port.className}`}
             onMouseDown={(e) => { e.stopPropagation(); onPortMouseDown(e, node.id, port.id); }}
             onMouseUp={(e) => { e.stopPropagation(); onPortMouseUp(e, node.id, port.id); }}
             title={`${port.id} Port`}
           >
-             <div className="w-1 h-1 bg-white/30 rounded-full absolute top-1 left-1 pointer-events-none" />
+              <div className={`w-2 h-2 rounded-full ${portColor}`}></div>
           </div>
       ))}
 
