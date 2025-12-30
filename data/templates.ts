@@ -123,5 +123,106 @@ export const APP_TEMPLATES: Template[] = [
     edges: [
       { id: 'de-1', source: 'd-trigger', target: 'd-shell' }
     ]
+  },
+  {
+    name: "Full Quality Assurance",
+    description: "End-to-end coding workflow. Generates code, creates unit tests, and performs a security audit.",
+    nodes: [
+      {
+        id: 'qa-trigger',
+        type: NodeType.TRIGGER,
+        position: { x: 50, y: 300 },
+        data: { label: 'Start QA', status: 'idle', shape: 'circle' }
+      },
+      {
+        id: 'qa-gen',
+        type: NodeType.GEMINI_GENERATE,
+        position: { x: 250, y: 200 },
+        data: {
+          label: 'Generate Function',
+          shape: 'square',
+          status: 'idle',
+          prompt: "Write a Python function 'parse_user_data' that takes a raw JSON string, parses it, and validates 'email' and 'age' fields."
+        }
+      },
+      {
+        id: 'qa-test',
+        type: NodeType.AI_UNIT_TEST,
+        position: { x: 550, y: 100 },
+        data: {
+          label: 'Generate Tests',
+          shape: 'square',
+          status: 'idle',
+          prompt: "Write pytest unit tests. Include edge cases for malformed JSON and invalid emails."
+        }
+      },
+      {
+        id: 'qa-check',
+        type: NodeType.GEMINI_CHECK,
+        position: { x: 550, y: 300 },
+        data: {
+          label: 'Security Scan',
+          shape: 'square',
+          status: 'idle',
+          prompt: "Check for denial of service vulnerabilities in regex or exception handling."
+        }
+      }
+    ],
+    edges: [
+      { id: 'qae-1', source: 'qa-trigger', target: 'qa-gen' },
+      { id: 'qae-2', source: 'qa-gen', target: 'qa-test' },
+      { id: 'qae-3', source: 'qa-gen', target: 'qa-check' }
+    ]
+  },
+  {
+    name: "Algorithm Diff Check",
+    description: "Generates two different implementations of an algorithm and uses the Diff node to compare them.",
+    nodes: [
+      {
+        id: 'diff-trigger',
+        type: NodeType.TRIGGER,
+        position: { x: 50, y: 300 },
+        data: { label: 'Start Diff', status: 'idle', shape: 'circle' }
+      },
+      {
+        id: 'diff-v1',
+        type: NodeType.GEMINI_GENERATE,
+        position: { x: 300, y: 150 },
+        data: {
+          label: 'Bubble Sort (V1)',
+          shape: 'square',
+          status: 'idle',
+          prompt: "Write a Python function for Bubble Sort."
+        }
+      },
+      {
+        id: 'diff-v2',
+        type: NodeType.GEMINI_GENERATE,
+        position: { x: 300, y: 450 },
+        data: {
+          label: 'Quick Sort (V2)',
+          shape: 'square',
+          status: 'idle',
+          prompt: "Write a Python function for Quick Sort."
+        }
+      },
+      {
+        id: 'diff-node',
+        type: NodeType.DIFF,
+        position: { x: 600, y: 300 },
+        data: {
+          label: 'Compare Algos',
+          shape: 'square',
+          status: 'idle',
+          prompt: ""
+        }
+      }
+    ],
+    edges: [
+      { id: 'diffe-1', source: 'diff-trigger', target: 'diff-v1' },
+      { id: 'diffe-2', source: 'diff-trigger', target: 'diff-v2' },
+      { id: 'diffe-3', source: 'diff-v1', target: 'diff-node' },
+      { id: 'diffe-4', source: 'diff-v2', target: 'diff-node' }
+    ]
   }
 ];

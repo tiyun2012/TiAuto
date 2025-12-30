@@ -145,21 +145,21 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
     return null;
   };
 
-  // Run Button overlay (Visible on Group Hover)
+  // Run Button overlay (Always Visible)
   const renderRunButton = () => {
       if (isNote || data.status === 'running') return null;
       
       // Different positioning based on shape
-      let btnClass = "absolute -top-4 -right-4"; 
+      let btnClass = "absolute -top-3 -right-3"; 
       if (shape === 'circle') btnClass = "absolute -top-1 -right-1";
 
       return (
         <button
             onClick={(e) => { e.stopPropagation(); onRunNode(id); }}
-            className={`${btnClass} z-50 p-2 rounded-full bg-green-600 text-white shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:scale-110 hover:bg-green-500`}
+            className={`${btnClass} z-50 p-1.5 rounded-full text-white shadow-lg transition-transform hover:scale-110 ${portColor} border-2 border-gray-900`}
             title="Execute Node"
         >
-            <Play className="w-3 h-3 fill-current" />
+            <Play className="w-2.5 h-2.5 fill-current" />
         </button>
       );
   };
@@ -206,6 +206,23 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       return data.prompt || "No details.";
   };
 
+  // Shared Eye Button for Square/Circle
+  const renderEyeButton = () => {
+     if (isNote) return null;
+     return (
+        <button 
+           onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
+           className={`absolute top-5 left-1/2 -translate-x-1/2 z-40 p-1 rounded-full bg-gray-900/90 border transition-all shadow-sm backdrop-blur-sm hover:scale-110 ${
+               showPopup 
+               ? `${titleColor} ${borderClass}` 
+               : `text-gray-400 border-transparent hover:text-white hover:bg-gray-800`
+           }`}
+        >
+            {showPopup ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+        </button>
+     );
+  };
+
   const renderContent = () => {
       // --- CIRCLE SHAPE ---
       if (shape === 'circle') {
@@ -241,19 +258,8 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                      {renderStatus()}
                  </div>
 
-                 {/* 4. Popup Toggle (Positioned on rim for circle) */}
-                 {!isNote && (
-                     <button 
-                        onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
-                        className={`absolute top-3 right-3 z-30 p-1.5 rounded-full bg-gray-900 border transition-colors shadow-sm ${
-                            showPopup 
-                            ? `${titleColor} ${borderClass}` 
-                            : `text-gray-500 border-transparent hover:${titleColor} hover:bg-gray-800`
-                        }`}
-                     >
-                         {showPopup ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                     </button>
-                 )}
+                 {/* 4. Popup Toggle (Center Top under Port) */}
+                 {renderEyeButton()}
               </div>
           );
       }
@@ -280,19 +286,8 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                     {renderStatus()}
                   </div>
 
-                  {/* 4. Popup Toggle (Top Right) */}
-                  {!isNote && (
-                     <button 
-                        onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
-                        className={`absolute top-1 right-1 z-30 p-1.5 rounded-lg bg-gray-900/80 border transition-all duration-200 shadow-sm backdrop-blur-sm ${
-                            showPopup 
-                            ? `${titleColor} ${borderClass}` 
-                            : `text-gray-500 border-transparent hover:${titleColor} hover:bg-gray-800`
-                        }`}
-                     >
-                         {showPopup ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                     </button>
-                 )}
+                  {/* 4. Popup Toggle (Center Top under Port) */}
+                  {renderEyeButton()}
               </div>
           );
       }

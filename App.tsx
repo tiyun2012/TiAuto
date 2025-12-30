@@ -122,6 +122,20 @@ export default function App() {
       }
   };
 
+  const handleDownloadTemplate = (template: Template) => {
+      const dataStr = JSON.stringify({ nodes: template.nodes, edges: template.edges, version: 1 }, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `template-${template.name.toLowerCase().replace(/\s+/g, '-')}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setToast({ message: `Downloaded template: ${template.name}`, type: 'success' });
+  };
+
   // Auto-dismiss toast
   useEffect(() => {
     if (toast) {
@@ -510,19 +524,29 @@ export default function App() {
                     </div>
                     <div className="p-4 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4">
                         {APP_TEMPLATES.map((t, i) => (
-                            <button 
-                                key={i}
-                                onClick={() => handleLoadTemplate(t)}
-                                className="flex flex-col items-start p-4 rounded-lg bg-gray-800 border border-gray-700 hover:border-blue-500 hover:bg-gray-750 transition-all text-left group"
-                            >
-                                <div className="font-bold text-blue-400 mb-1 group-hover:text-blue-300">{t.name}</div>
-                                <div className="text-sm text-gray-400 leading-relaxed">{t.description}</div>
-                                <div className="mt-3 flex gap-2">
-                                    {t.nodes.map(n => (
-                                        <div key={n.id} className="w-2 h-2 rounded-full bg-gray-600" title={n.type}></div>
-                                    ))}
-                                </div>
-                            </button>
+                            <div key={i} className="group relative flex flex-col rounded-lg bg-gray-800 border border-gray-700 transition-all hover:border-blue-500 hover:bg-gray-750">
+                                <button 
+                                    onClick={() => handleLoadTemplate(t)}
+                                    className="flex-1 flex flex-col items-start p-4 text-left w-full"
+                                >
+                                    <div className="font-bold text-blue-400 mb-1 group-hover:text-blue-300">{t.name}</div>
+                                    <div className="text-sm text-gray-400 leading-relaxed">{t.description}</div>
+                                    <div className="mt-3 flex gap-2">
+                                        {t.nodes.map(n => (
+                                            <div key={n.id} className="w-2 h-2 rounded-full bg-gray-600" title={n.type}></div>
+                                        ))}
+                                    </div>
+                                </button>
+                                
+                                {/* Download Action */}
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleDownloadTemplate(t); }}
+                                    className="absolute top-2 right-2 p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                    title="Download Template JSON"
+                                >
+                                    <Download className="w-4 h-4" />
+                                </button>
+                            </div>
                         ))}
                     </div>
                     <div className="p-4 bg-gray-950/50 text-xs text-gray-500 text-center border-t border-gray-800">
