@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff } from 'lucide-react';
 import { NODE_DIMENSIONS } from '../constants';
 
 interface NodeComponentProps {
@@ -156,18 +156,19 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
        posClass = "top-1 left-1"; 
     }
 
-    const badgeCommon = `absolute ${posClass} p-1.5 rounded-full bg-gray-900 border-2 shadow-lg z-40 flex items-center justify-center transition-transform hover:scale-110`;
+    // Dynamic coloring based on node theme
+    const badgeCommon = `absolute ${posClass} p-1.5 rounded-full bg-gray-900 border-2 shadow-lg z-40 flex items-center justify-center transition-transform hover:scale-110 ${borderClass} ${titleColor}`;
 
     if (isAI) {
         return (
-            <div className={`${badgeCommon} border-purple-500/80 text-purple-400`} title="AI Powered">
-                <Sparkles className="w-3.5 h-3.5" />
+            <div className={badgeCommon} title="AI Powered">
+                <Brain className="w-3.5 h-3.5" />
             </div>
         );
     }
     if (isLogic) {
         return (
-            <div className={`${badgeCommon} border-gray-600 text-gray-400`} title="Logic / Utility">
+            <div className={badgeCommon} title="Logic / Utility">
                 <Cpu className="w-3.5 h-3.5" />
             </div>
         );
@@ -279,15 +280,15 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                 </div>
                 
                 <div className="flex items-center gap-2 pl-2 flex-shrink-0">
-                    {/* Rectangle still uses inline badges for cleaner header layout */}
+                    {/* Rectangle still uses inline badges for cleaner header layout, updated to Brain */}
                     {!isNote && isAI && (
-                        <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-[9px] text-purple-300 font-medium uppercase tracking-wider">
-                            <Sparkles className="w-2.5 h-2.5" />
+                        <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gray-900/50 border border-gray-600/50 text-[9px] font-medium uppercase tracking-wider ${titleColor}`}>
+                            <Brain className="w-2.5 h-2.5" />
                             <span>AI</span>
                         </div>
                     )}
                     {!isNote && isLogic && (
-                        <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gray-700/50 border border-gray-600/50 text-[9px] text-gray-400 font-medium uppercase tracking-wider">
+                        <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gray-900/50 border border-gray-600/50 text-[9px] font-medium uppercase tracking-wider ${titleColor}`}>
                             <Cpu className="w-2.5 h-2.5" />
                             <span>Logic</span>
                         </div>

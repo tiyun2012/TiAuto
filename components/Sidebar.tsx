@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { NodeType } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Sparkles, Cpu, SquareTerminal, FlaskConical, FileDiff } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, SquareTerminal, FlaskConical, FileDiff } from 'lucide-react';
 
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
@@ -134,8 +134,8 @@ const ToolButton = ({ icon, label, onClick, color, type }: { icon: any, label: s
                 {React.cloneElement(icon, { className: `w-6 h-6 ${color}` })}
                 
                 {/* Type Indicator Dot */}
-                {isAI && <div className="absolute -top-1 -right-1 bg-gray-900 rounded-full p-0.5 border border-gray-700"><Sparkles className="w-2.5 h-2.5 text-purple-400" /></div>}
-                {isLogic && <div className="absolute -top-1 -right-1 bg-gray-900 rounded-full p-0.5 border border-gray-700"><Cpu className="w-2.5 h-2.5 text-gray-400" /></div>}
+                {isAI && <div className="absolute -top-1 -right-1 bg-gray-900 rounded-full p-0.5 border border-gray-700"><Brain className={`w-2.5 h-2.5 ${color}`} /></div>}
+                {isLogic && <div className="absolute -top-1 -right-1 bg-gray-900 rounded-full p-0.5 border border-gray-700"><Cpu className={`w-2.5 h-2.5 ${color}`} /></div>}
             </div>
             <span className="text-[10px] font-medium text-gray-500 group-hover:text-gray-300">{label}</span>
             
