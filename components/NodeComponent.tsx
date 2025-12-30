@@ -147,7 +147,16 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   // Corner Badge for AI/Logic (Square/Circle only)
   const renderCornerBadge = () => {
     if (isNote) return null;
-    const badgeCommon = "absolute -top-3 -left-3 p-1.5 rounded-full bg-gray-900 border-2 shadow-lg z-40 flex items-center justify-center";
+    
+    // Position adjustments based on shape
+    let posClass = "-top-3 -left-3"; // Default square corner
+    
+    if (shape === 'circle') {
+       // Move badge inward so it sits on the "shoulder" of the circle rather than floating in empty corner space
+       posClass = "top-1 left-1"; 
+    }
+
+    const badgeCommon = `absolute ${posClass} p-1.5 rounded-full bg-gray-900 border-2 shadow-lg z-40 flex items-center justify-center transition-transform hover:scale-110`;
 
     if (isAI) {
         return (
@@ -180,20 +189,21 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       // --- CIRCLE SHAPE ---
       if (shape === 'circle') {
           const r = width / 2;
-          const textRadius = r - 12; // Push text closer to edge
+          const textRadius = r - 14; // Push text closer to edge
           const pathId = `curve-${id}`;
           
           return (
               <div className="relative w-full h-full">
                  {renderCornerBadge()}
-                 {/* 1. Curved Text (Label) */}
+                 
+                 {/* 1. Curved Text (Label) - Top Semicircle */}
                  <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-10">
                      <path 
                         id={pathId} 
-                        d={`M 10,${height/2 + 10} A ${textRadius},${textRadius} 0 1,1 ${width-10},${height/2 + 10}`} 
+                        d={`M 10,${height/2} A ${textRadius},${textRadius} 0 1,1 ${width-10},${height/2}`} 
                         fill="transparent" 
                      />
-                     <text className={`text-[9px] font-bold uppercase tracking-widest ${isNote ? 'fill-yellow-900' : 'fill-gray-400'}`}>
+                     <text className={`text-[10px] font-bold uppercase tracking-widest ${isNote ? 'fill-yellow-900' : 'fill-gray-300'}`}>
                         <textPath href={`#${pathId}`} startOffset="50%" textAnchor="middle">
                             {data.label}
                         </textPath>
@@ -201,20 +211,20 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                  </svg>
 
                  {/* 2. Centered Icon */}
-                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <Icon className={`w-12 h-12 ${titleColor} opacity-90`} />
+                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none mb-1">
+                    <Icon className={`w-12 h-12 ${titleColor} opacity-90 drop-shadow-lg`} />
                  </div>
 
                  {/* 3. Status Indicator (Bottom Center) */}
-                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+                 <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20">
                      {renderStatus()}
                  </div>
 
-                 {/* 4. Popup Toggle (Top Right Offset) */}
+                 {/* 4. Popup Toggle (Positioned on rim for circle) */}
                  {!isNote && (
                      <button 
                         onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
-                        className={`absolute top-2 right-2 z-30 p-1 rounded-full bg-gray-900/80 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shadow-sm ${showPopup ? 'text-blue-400 border-blue-500/50' : ''}`}
+                        className={`absolute top-2 right-2 z-30 p-1.5 rounded-full bg-gray-900 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shadow-sm ${showPopup ? 'text-blue-400 border-blue-500/50' : ''}`}
                      >
                          {showPopup ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                      </button>
