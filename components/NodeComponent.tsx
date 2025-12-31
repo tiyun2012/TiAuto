@@ -1,7 +1,8 @@
 
+
 import React, { useState } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff, Sparkles, Bot } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff, Sparkles, Bot, Zap, Cloud, Server, ThumbsUp, ThumbsDown, CircleDashed, Files } from 'lucide-react';
 import { NODE_DIMENSIONS } from '../constants';
 
 interface NodeComponentProps {
@@ -11,7 +12,7 @@ interface NodeComponentProps {
   onContextMenu: (e: React.MouseEvent, id: string) => void;
   onPortMouseDown: (e: React.MouseEvent, nodeId: string, handle: string) => void;
   onPortMouseUp: (e: React.MouseEvent, nodeId: string, handle: string) => void;
-  onRunNode: (id: string) => void;
+  onRunNode: (id: string, action?: string) => void;
 }
 
 // Updated Port Positioning: 
@@ -44,8 +45,9 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
 
   // Categorize
   const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST].includes(type);
-  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF].includes(type);
+  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL].includes(type);
   const isNote = type === NodeType.NOTE;
+  const hasFiles = data.files && Object.keys(data.files).length > 0;
 
   switch (type) {
     case NodeType.TRIGGER:
@@ -56,7 +58,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       portColor = "bg-green-500";
       break;
     case NodeType.GEMINI_GENERATE:
-      Icon = Sparkles; // Changed from FileCode to Sparkles for AI Gen
+      Icon = Sparkles; 
       bgClass = "bg-gray-800";
       borderClass = "border-purple-500";
       titleColor = "text-purple-400";
@@ -118,6 +120,13 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       titleColor = "text-indigo-400";
       portColor = "bg-indigo-500";
       break;
+    case NodeType.APPROVAL:
+      Icon = ThumbsUp;
+      bgClass = "bg-gray-900";
+      borderClass = "border-rose-500";
+      titleColor = "text-rose-400";
+      portColor = "bg-rose-500";
+      break;
     case NodeType.NOTE:
       Icon = StickyNote;
       bgClass = "bg-yellow-100 text-yellow-900";
@@ -140,19 +149,18 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   // Status Indicator
   const renderStatus = () => {
     if (data.status === 'running') return <div className="animate-spin h-3 w-3 border-[1.5px] border-white border-t-transparent rounded-full shadow-sm" />;
+    if (data.status === 'waiting') return <CircleDashed className="w-4 h-4 text-yellow-400 animate-pulse bg-gray-900 rounded-full" />;
     if (data.status === 'success') return <CheckCircle2 className="w-4 h-4 text-green-500 bg-gray-900 rounded-full" />;
     if (data.status === 'error') return <AlertCircle className="w-4 h-4 text-red-500 bg-gray-900 rounded-full" />;
     return null;
   };
 
-  // Run Button overlay (Always Visible)
+  // Run Button overlay
   const renderRunButton = () => {
       if (isNote || data.status === 'running') return null;
-      
-      // Different positioning based on shape
       let btnClass = "absolute -top-3 -right-3"; 
       if (shape === 'circle') btnClass = "absolute -top-1 -right-1";
-
+      
       return (
         <button
             onClick={(e) => { e.stopPropagation(); onRunNode(id); }}
@@ -163,32 +171,50 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
         </button>
       );
   };
+
+  // Approval Buttons Overlay (If waiting)
+  const renderApprovalButtons = () => {
+      if (type !== NodeType.APPROVAL || data.status !== 'waiting') return null;
+      
+      return (
+          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 flex gap-2 z-50">
+              <button 
+                onClick={(e) => { e.stopPropagation(); onRunNode(id, 'approve'); }}
+                className="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded-md shadow-lg text-xs font-bold flex items-center gap-1 animate-bounce"
+              >
+                  <ThumbsUp className="w-3 h-3" /> Approve
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); onRunNode(id, 'reject'); }}
+                className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-md shadow-lg text-xs font-bold flex items-center gap-1"
+              >
+                  <ThumbsDown className="w-3 h-3" /> Stop
+              </button>
+          </div>
+      );
+  };
   
-  // Corner Badge for AI/Logic (Square/Circle only)
+  // Corner Badge
   const renderCornerBadge = () => {
     if (isNote) return null;
-    
-    // Position adjustments based on shape
-    let posClass = "-top-3 -left-3"; // Default square corner
-    
-    if (shape === 'circle') {
-       // Move badge inward so it sits on the "shoulder" of the circle rather than floating in empty corner space
-       posClass = "top-1 left-1"; 
-    }
+    let posClass = "-top-3 -left-3"; 
+    if (shape === 'circle') posClass = "top-1 left-1"; 
 
     // Dynamic coloring based on node theme
     const badgeCommon = `absolute ${posClass} p-1.5 rounded-full bg-gray-900 border-2 shadow-lg z-40 flex items-center justify-center transition-transform hover:scale-110 ${borderClass} ${titleColor}`;
 
     if (isAI) {
-        // Determine Icon based on selected model
+        const provider = data.provider;
         const model = data.model || '';
         let AiIcon = Bot;
-        
-        if (model.includes('gemini')) AiIcon = Sparkles;
-        else if (model.includes('deepseek')) AiIcon = Brain;
+        let tooltip = "Default AI";
+        if (provider === 'gemini' || (!provider && model.includes('gemini'))) { AiIcon = Sparkles; tooltip = "Gemini"; } 
+        else if (provider === 'deepseek' || (!provider && model.includes('deepseek'))) { AiIcon = Brain; tooltip = "DeepSeek"; } 
+        else if (provider === 'qwen' || (!provider && model.includes('qwen'))) { AiIcon = Cloud; tooltip = "Qwen"; } 
+        else if (provider === 'openai' || (!provider && model.includes('gpt'))) { AiIcon = Zap; tooltip = "OpenAI"; }
 
         return (
-            <div className={badgeCommon} title={model ? `Model: ${model}` : "AI Powered"}>
+            <div className={badgeCommon} title={`${tooltip} ${model ? `(${model})` : ''}`}>
                 <AiIcon className="w-3.5 h-3.5" />
             </div>
         );
@@ -209,11 +235,11 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       if (type === NodeType.SHELL_EXEC) return data.prompt || "Execute Shell Command";
       if (type === NodeType.TODO_LIST) return data.todo;
       if (type === NodeType.DIFF) return "Comparing inputs...";
+      if (type === NodeType.APPROVAL) return "Waiting for human confirmation...";
       if (data.output) return data.output;
       return data.prompt || "No details.";
   };
 
-  // Shared Eye Button for Square/Circle
   const renderEyeButton = () => {
      if (isNote) return null;
      return (
@@ -234,14 +260,12 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       // --- CIRCLE SHAPE ---
       if (shape === 'circle') {
           const r = width / 2;
-          const textRadius = r - 14; // Push text closer to edge
+          const textRadius = r - 14; 
           const pathId = `curve-${id}`;
           
           return (
               <div className="relative w-full h-full">
                  {renderCornerBadge()}
-                 
-                 {/* 1. Curved Text (Label) - Top Semicircle */}
                  <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-10">
                      <path 
                         id={pathId} 
@@ -254,55 +278,41 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                         </textPath>
                      </text>
                  </svg>
-
-                 {/* 2. Centered Icon */}
                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none mb-1">
                     <Icon className={`w-12 h-12 ${titleColor} opacity-90 drop-shadow-lg`} />
                  </div>
-
-                 {/* 3. Status Indicator (Bottom Center) */}
                  <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20">
                      {renderStatus()}
                  </div>
-
-                 {/* 4. Popup Toggle (Center Top under Port) */}
                  {renderEyeButton()}
               </div>
           );
       }
 
-      // --- SQUARE SHAPE (True Square) ---
+      // --- SQUARE SHAPE ---
       if (shape === 'square') {
           return (
               <div className="relative w-full h-full">
                   {renderCornerBadge()}
-                  {/* 1. Center Icon */}
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-4">
                       <Icon className={`w-14 h-14 ${titleColor} opacity-90 transition-transform group-hover:scale-110 duration-300`} />
                   </div>
-                  
-                  {/* 2. Label (Bottom Aligned) */}
                   <div className="absolute bottom-0 w-full p-2 flex justify-center pointer-events-none">
                     <span className={`font-bold text-[10px] uppercase tracking-wide leading-tight text-center line-clamp-2 px-2 py-0.5 rounded-full ${isNote ? 'text-yellow-900' : 'text-gray-300 bg-gray-900/60 backdrop-blur-sm'}`}>
                         {data.label}
                     </span>
                   </div>
-                  
-                  {/* 3. Status (Top Left) */}
                   <div className="absolute top-2 left-2 z-20">
                     {renderStatus()}
                   </div>
-
-                  {/* 4. Popup Toggle (Center Top under Port) */}
                   {renderEyeButton()}
               </div>
           );
       }
       
-      // --- RECTANGLE SHAPE (Wide Header) ---
+      // --- RECTANGLE SHAPE ---
       return (
         <div className={`p-3 h-full flex flex-col justify-center ${isNote ? '' : 'text-gray-100'}`}>
-            {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 overflow-hidden">
                     <Icon className={`w-5 h-5 flex-shrink-0 ${isNote ? titleColor : titleColor}`} />
@@ -310,12 +320,14 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                 </div>
                 
                 <div className="flex items-center gap-2 pl-2 flex-shrink-0">
-                    {/* Rectangle still uses inline badges for cleaner header layout, updated to Brain */}
                     {!isNote && isAI && (
                         <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gray-900/50 border border-gray-600/50 text-[9px] font-medium uppercase tracking-wider ${titleColor}`}>
-                            {data.model?.includes('deepseek') ? <Brain className="w-2.5 h-2.5" /> : 
-                             data.model?.includes('gemini') ? <Sparkles className="w-2.5 h-2.5" /> : 
-                             <Bot className="w-2.5 h-2.5" />}
+                             {/* Specific Icon for Rectangle Header */}
+                             {data.provider === 'deepseek' ? <Brain className="w-2.5 h-2.5" /> : 
+                              data.provider === 'gemini' ? <Sparkles className="w-2.5 h-2.5" /> : 
+                              data.provider === 'qwen' ? <Cloud className="w-2.5 h-2.5" /> :
+                              data.provider === 'openai' ? <Zap className="w-2.5 h-2.5" /> :
+                              <Bot className="w-2.5 h-2.5" />}
                             <span>AI</span>
                         </div>
                     )}
@@ -325,9 +337,16 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                             <span>Logic</span>
                         </div>
                     )}
-                    {renderStatus()}
+                    
+                    {/* Multi-file indicator Badge */}
+                    {!isNote && hasFiles && (
+                         <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-900/50 border border-blue-600/50 text-[9px] font-medium uppercase tracking-wider text-blue-300`}>
+                            <Files className="w-2.5 h-2.5" />
+                            <span>{Object.keys(data.files!).length}</span>
+                        </div>
+                    )}
 
-                    {/* Popup Toggle */}
+                    {renderStatus()}
                     {!isNote && (
                          <button 
                             onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
@@ -336,7 +355,6 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                                 ? `${titleColor} bg-gray-800` 
                                 : `text-gray-500 hover:${titleColor} hover:bg-gray-800`
                             }`}
-                            title={showPopup ? "Close View" : "Quick View"}
                          >
                             {showPopup ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                          </button>
@@ -344,7 +362,6 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                 </div>
             </div>
 
-            {/* Note Body (Preserved) */}
             {isNote && (
                  <div className="text-xs text-yellow-900 font-sans p-1 mt-1 flex-1 overflow-hidden">
                     {data.prompt || "Note..."}
@@ -367,12 +384,9 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       onMouseDown={(e) => onMouseDown(e, node.id)}
       onContextMenu={(e) => onContextMenu(e, node.id)}
     >
-      {/* Run Button (n8n style) */}
       {renderRunButton()}
-
-      {/* 4 Ports */}
-      {/* Socket Style: bg-gray-950 (Canvas color) + Border-2 (Node Color) + Inner Dot */}
-      {/* We use explicit flex centering for the inner dot */}
+      {renderApprovalButtons()}
+      
       {type !== NodeType.NOTE && PORTS.map(port => (
           <div
             key={port.id}
@@ -387,7 +401,6 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
 
       {renderContent()}
 
-      {/* Popup Widget (Detail View) */}
       {!isNote && showPopup && (
           <div 
             className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-80 bg-gray-900 border border-gray-600 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150 select-text cursor-default"
@@ -407,7 +420,6 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
               <div className="p-3 max-h-60 overflow-y-auto font-mono text-xs text-gray-300 scrollbar-thin">
                   {getWidgetContent()}
               </div>
-              {/* Arrow */}
               <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-gray-800 border-l border-t border-gray-600 rotate-45"></div>
           </div>
       )}

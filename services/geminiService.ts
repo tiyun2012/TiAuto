@@ -1,140 +1,202 @@
 
+
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import OpenAI from "openai";
 import { AISettings, AIProvider } from "../types";
 
-// --- GEMINI IMPLEMENTATION ---
+// --- INTERFACES & FACTORY ---
 
-const getGeminiClient = (apiKey: string) => new GoogleGenAI({ apiKey });
+interface GenerateParams {
+    prompt: string;
+    systemInstruction: string;
+    model?: string;
+    responseSchema?: any; // For JSON structure
+    tools?: any[]; // For Grounding or functions
+}
 
-// Using gemini-3-pro-preview for complex coding tasks as per guidelines
-const GEMINI_CODE_MODEL = 'gemini-3-pro-preview';
-// Using gemini-3-flash-preview for faster, simpler checks
-const GEMINI_CHECK_MODEL = 'gemini-3-flash-preview';
+interface AIProviderStrategy {
+    generate(params: GenerateParams): Promise<{ text: string; groundingSources?: any[] }>;
+}
 
+// --- PROVIDER IMPLEMENTATIONS ---
 
-// --- DEEPSEEK IMPLEMENTATION (Via OpenAI SDK) ---
+// 1. Google Gemini Strategy
+class GeminiStrategy implements AIProviderStrategy {
+    private client: GoogleGenAI;
+    private defaultModel = 'gemini-3-pro-preview';
 
-const callDeepSeek = async (apiKey: string, model: string, messages: any[], jsonMode: boolean = false): Promise<string> => {
-    if (!apiKey) throw new Error("DeepSeek API Key is missing. Please check Settings.");
+    constructor(apiKey: string) {
+        if (!apiKey) throw new Error("Gemini API Key is missing");
+        this.client = new GoogleGenAI({ apiKey });
+    }
 
-    const client = new OpenAI({
-        baseURL: 'https://api.deepseek.com',
-        apiKey: apiKey,
-        dangerouslyAllowBrowser: true 
-    });
+    async generate(params: GenerateParams) {
+        // Use model from params, or default. Ensure it's a Gemini model name.
+        const model = params.model && params.model.startsWith('gemini') ? params.model : this.defaultModel;
+        
+        const config: any = {
+            systemInstruction: params.systemInstruction,
+            temperature: 0.2,
+        };
 
-    try {
-        const completion = await client.chat.completions.create({
-            messages: messages,
-            model: model || "deepseek-coder",
-            response_format: jsonMode ? { type: "json_object" } : undefined
+        if (params.responseSchema) {
+            config.responseMimeType = "application/json";
+            config.responseSchema = params.responseSchema;
+        }
+
+        if (params.tools) {
+            config.tools = params.tools;
+        }
+
+        const response = await this.client.models.generateContent({
+            model: model,
+            contents: params.prompt,
+            config: config
         });
 
-        return completion.choices[0].message.content || "";
-    } catch (error: any) {
-        // Extract error details
-        const status = error?.status || error?.response?.status;
-        const msg = error?.error?.message || error?.message || "";
-        const code = error?.error?.code || error?.code;
-
-        // Robust check for Insufficient Balance (Status 402)
-        // Checks status code, error code string, and message content
-        const isInsufficientBalance = 
-            status === 402 || 
-            String(status) === '402' || 
-            code === 'insufficient_quota' || 
-            msg.toLowerCase().includes("insufficient balance");
-
-        if (isInsufficientBalance) {
-             console.warn("DeepSeek API: Insufficient Balance detected (402). Attempting to handle or fallback.");
-             throw new Error("DeepSeek: Insufficient Balance (402).");
+        // Extract grounding
+        const sources: any[] = [];
+        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+        if (chunks) {
+            chunks.forEach((chunk: any) => {
+                if (chunk.web?.uri && chunk.web?.title) {
+                    sources.push({ title: chunk.web.title, uri: chunk.web.uri });
+                }
+            });
         }
+
+        return { 
+            text: response.text || "No response.",
+            groundingSources: sources.length > 0 ? sources : undefined
+        };
+    }
+}
+
+// 2. OpenAI Compatible Strategy (DeepSeek, Qwen, GPT)
+class OpenAICompatibleStrategy implements AIProviderStrategy {
+    private client: OpenAI;
+    private defaultModel: string;
+    private providerName: string;
+
+    constructor(apiKey: string, baseURL: string, defaultModel: string, providerName: string) {
+        if (!apiKey) throw new Error(`${providerName} API Key is missing`);
+        this.client = new OpenAI({
+            baseURL: baseURL,
+            apiKey: apiKey,
+            dangerouslyAllowBrowser: true
+        });
+        this.defaultModel = defaultModel;
+        this.providerName = providerName;
+    }
+
+    async generate(params: GenerateParams) {
+        const model = params.model || this.defaultModel;
         
-        // 401 is Invalid Key
-        if (status === 401) {
-            console.warn("DeepSeek API: Invalid Key (401).");
-            throw new Error("DeepSeek: Invalid API Key (401).");
+        const messages: any[] = [
+            { role: "system", content: params.systemInstruction },
+            { role: "user", content: params.prompt }
+        ];
+
+        const config: any = {
+            messages: messages,
+            model: model,
+        };
+
+        // Handle JSON Mode
+        // Note: Generic OpenAI compatible often supports json_object, but structured outputs (response_format with schema) vary.
+        // We will assume json_object if schema is present, and append schema to prompt.
+        if (params.responseSchema) {
+            config.response_format = { type: "json_object" };
+            // Append schema instruction to prompt because many providers ignore schema in tools/response_format
+            messages[0].content += "\n\nOutput strictly valid JSON.";
         }
 
-        // For other errors, log to console for debugging
-        console.error("DeepSeek API Unexpected Error:", error);
-        throw new Error(msg || "DeepSeek API Failed");
-    }
-};
-
-
-// --- HELPER: FALLBACK RUNNER ---
-
-const runWithFallback = async (
-    settings: AISettings,
-    deepSeekFn: () => Promise<string>,
-    geminiFn: () => Promise<string>
-): Promise<string> => {
-    if (settings.provider === 'deepseek') {
         try {
-            return await deepSeekFn();
+            const completion = await this.client.chat.completions.create(config);
+            return { text: completion.choices[0].message.content || "" };
         } catch (error: any) {
-            // Check if we can fall back (Check settings or global process env)
-            // Safety check for process.env in browser
-            const envKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
-            const geminiKey = settings.geminiKey || envKey;
-            
-            if (geminiKey) {
-                console.warn(`[AI Service] DeepSeek failed (${error.message}). Falling back to Gemini.`);
-                return await geminiFn();
-            }
-            
-            // No fallback available, throw the original error with clear instructions
-             const errMsg = error.message || "";
-             if (errMsg.includes("Insufficient Balance")) {
-                throw new Error("DeepSeek Error: Insufficient Balance. Please add funds at deepseek.com or configure a Gemini API Key in Settings for automatic fallback.");
-            }
-            throw error;
+             // DeepSeek specific balance check
+             if (error?.status === 402 || error?.message?.includes("insufficient")) {
+                 throw new Error(`${this.providerName}: Insufficient Balance.`);
+             }
+             throw error;
         }
     }
-    // Provider is Gemini
-    return await geminiFn();
+}
+
+// --- FACTORY FUNCTION ---
+
+const getProviderStrategy = (settings: AISettings, overrideProvider?: AIProvider): AIProviderStrategy => {
+    // 1. Determine active provider
+    const provider = overrideProvider || settings.provider;
+
+    // 2. Return Strategy
+    switch (provider) {
+        case 'gemini':
+            return new GeminiStrategy(settings.geminiKey || (typeof process !== 'undefined' ? process.env.API_KEY || '' : ''));
+        
+        case 'deepseek':
+            return new OpenAICompatibleStrategy(
+                settings.deepseekKey || (typeof process !== 'undefined' ? process.env.DEEPSEEK_API_KEY || '' : ''),
+                'https://api.deepseek.com',
+                settings.deepseekModel || 'deepseek-coder',
+                'DeepSeek'
+            );
+        
+        case 'qwen':
+            return new OpenAICompatibleStrategy(
+                settings.qwenKey,
+                settings.qwenUrl || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+                settings.qwenModel || 'qwen-max',
+                'Qwen'
+            );
+
+        case 'openai':
+             return new OpenAICompatibleStrategy(
+                settings.openaiKey,
+                settings.openaiUrl || 'https://api.openai.com/v1',
+                settings.openaiModel || 'gpt-4o',
+                'OpenAI'
+            );
+            
+        default:
+            throw new Error(`Unknown provider: ${provider}`);
+    }
 };
 
 
-// --- UNIFIED SERVICE EXPORTS ---
+// --- EXPORTED SERVICE FUNCTIONS ---
 
-export const generateCode = async (prompt: string, systemInstruction: string, settings: AISettings, modelOverride?: string): Promise<string> => {
-  const geminiTask = async () => {
-    const envKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
-    const apiKey = settings.geminiKey || envKey || '';
-    if (!apiKey) throw new Error("Gemini API Key is missing");
-    const ai = getGeminiClient(apiKey);
+export interface GenerationResult {
+    text: string;
+    groundingSources?: Array<{ title: string; uri: string }>;
+}
+
+export const generateCode = async (
+    prompt: string, 
+    systemInstruction: string, 
+    settings: AISettings, 
+    modelOverride?: string,
+    useSearch?: boolean,
+    providerOverride?: AIProvider
+): Promise<GenerationResult> => {
+
+    const strategy = getProviderStrategy(settings, providerOverride);
     
-    // Only use model override if it looks like a gemini model (starts with gemini)
-    const model = (modelOverride && modelOverride.startsWith('gemini')) ? modelOverride : GEMINI_CODE_MODEL;
+    // If Gemini and search is requested, pass tools
+    const tools = (useSearch && (providerOverride === 'gemini' || (!providerOverride && settings.provider === 'gemini'))) 
+                  ? [{ googleSearch: {} }] 
+                  : undefined;
 
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: prompt,
-      config: {
-        systemInstruction: systemInstruction || "You are an expert software engineer. Output only the requested code or explanation. If generating multiple files, separate them clearly with '### filename.ext'.",
-        temperature: 0.2,
-      },
+    return await strategy.generate({
+        prompt,
+        systemInstruction,
+        model: modelOverride,
+        tools
     });
-    return response.text || "No response generated.";
-  };
-
-  const deepSeekTask = async () => {
-      const messages = [
-          { role: "system", content: systemInstruction },
-          { role: "user", content: prompt }
-      ];
-      // Only use override if it looks like a deepseek model
-      const model = (modelOverride && modelOverride.startsWith('deepseek')) ? modelOverride : settings.deepseekModel;
-      return await callDeepSeek(settings.deepseekKey, model, messages);
-  };
-
-  return runWithFallback(settings, deepSeekTask, geminiTask);
 };
 
-export const refineCode = async (originalCode: string, instructions: string, settings: AISettings, modelOverride?: string): Promise<string> => {
+export const refineCode = async (originalCode: string, instructions: string, settings: AISettings, modelOverride?: string, providerOverride?: AIProvider): Promise<string> => {
     const prompt = `
         ORIGINAL CONTENT:
         ${originalCode}
@@ -145,39 +207,16 @@ export const refineCode = async (originalCode: string, instructions: string, set
         TASK:
         Rewrite the content based strictly on the instructions. Keep the same format (e.g., file separators) if present.
     `;
+    const strategy = getProviderStrategy(settings, providerOverride);
+    const result = await strategy.generate({
+        prompt,
+        systemInstruction: "You are an expert code refactorer. Output only the updated code.",
+        model: modelOverride
+    });
+    return result.text;
+};
 
-    const geminiTask = async () => {
-        const envKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
-        const apiKey = settings.geminiKey || envKey || '';
-        if (!apiKey) throw new Error("Gemini API Key is missing");
-        const ai = getGeminiClient(apiKey);
-        
-        const model = (modelOverride && modelOverride.startsWith('gemini')) ? modelOverride : GEMINI_CODE_MODEL;
-
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: prompt,
-            config: {
-              systemInstruction: "You are an expert code refactorer. Output only the updated code.",
-              temperature: 0.2,
-            },
-        });
-        return response.text || "No response generated.";
-    };
-
-    const deepSeekTask = async () => {
-        const messages = [
-            { role: "system", content: "You are an expert code refactorer. Output only the updated code." },
-            { role: "user", content: prompt }
-        ];
-        const model = (modelOverride && modelOverride.startsWith('deepseek')) ? modelOverride : settings.deepseekModel;
-        return await callDeepSeek(settings.deepseekKey, model, messages);
-    };
-
-    return runWithFallback(settings, deepSeekTask, geminiTask);
-  };
-
-export const generateUnitTests = async (context: string, instructions: string, settings: AISettings, modelOverride?: string): Promise<string> => {
+export const generateUnitTests = async (context: string, instructions: string, settings: AISettings, modelOverride?: string, providerOverride?: AIProvider): Promise<string> => {
     const prompt = `
       CONTEXT (Code to test):
       ${context}
@@ -186,45 +225,19 @@ export const generateUnitTests = async (context: string, instructions: string, s
       ${instructions}
 
       TASK:
-      Write comprehensive unit tests for the provided code. 
-      If the language is Python, use 'unittest' or 'pytest'.
-      If JavaScript/TypeScript, use 'Jest' syntax unless specified otherwise.
-      Separate files using '### filename' format.
+      Write comprehensive unit tests. Output code only.
+      Use standard libraries unless specified.
     `;
-    const sysMsg = "You are a Senior QA Automation Engineer. Write robust, edge-case covering unit tests. Output code only.";
-
-    const geminiTask = async () => {
-        const envKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
-        const apiKey = settings.geminiKey || envKey || '';
-        if (!apiKey) throw new Error("Gemini API Key is missing");
-        const ai = getGeminiClient(apiKey);
-        
-        const model = (modelOverride && modelOverride.startsWith('gemini')) ? modelOverride : GEMINI_CODE_MODEL;
-
-        const response = await ai.models.generateContent({
-          model: model,
-          contents: prompt,
-          config: {
-            systemInstruction: sysMsg,
-            temperature: 0.2,
-          },
-        });
-        return response.text || "No tests generated.";
-    };
-
-    const deepSeekTask = async () => {
-        const messages = [
-            { role: "system", content: sysMsg },
-            { role: "user", content: prompt }
-        ];
-        const model = (modelOverride && modelOverride.startsWith('deepseek')) ? modelOverride : settings.deepseekModel;
-        return await callDeepSeek(settings.deepseekKey, model, messages);
-    };
-
-    return runWithFallback(settings, deepSeekTask, geminiTask);
+    const strategy = getProviderStrategy(settings, providerOverride);
+    const result = await strategy.generate({
+        prompt,
+        systemInstruction: "You are a Senior QA Automation Engineer. Write robust, edge-case covering unit tests.",
+        model: modelOverride
+    });
+    return result.text;
 };
 
-export const checkCodeStructured = async (code: string, criteria: string, settings: AISettings, modelOverride?: string): Promise<string> => {
+export const checkCodeStructured = async (code: string, criteria: string, settings: AISettings, modelOverride?: string, providerOverride?: AIProvider): Promise<string> => {
     const fullPrompt = `
       CODE TO ANALYZE:
       \`\`\`
@@ -238,67 +251,44 @@ export const checkCodeStructured = async (code: string, criteria: string, settin
       The JSON structure MUST be an array of objects with keys: "severity" (High/Medium/Low), "line" (number), "issue" (string), "suggestion" (string).
     `;
 
-    const geminiTask = async () => {
-        const envKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
-        const apiKey = settings.geminiKey || envKey || '';
-        if (!apiKey) throw new Error("Gemini API Key is missing");
-        const ai = getGeminiClient(apiKey);
-
-        const schema: Schema = {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                severity: { type: Type.STRING, enum: ["High", "Medium", "Low", "Info"] },
-                line: { type: Type.INTEGER },
-                issue: { type: Type.STRING },
-                suggestion: { type: Type.STRING }
-              },
-              required: ["severity", "issue", "suggestion"]
-            }
-        };
-
-        const model = (modelOverride && modelOverride.startsWith('gemini')) ? modelOverride : GEMINI_CHECK_MODEL;
-
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: fullPrompt,
-            config: {
-                systemInstruction: "You are a senior QA engineer and security analyst. Be strict and specific. Return a raw JSON array of issues.",
-                responseMimeType: "application/json",
-                responseSchema: schema
-            }
-        });
-        return response.text || "[]";
-    };
-
-    const deepSeekTask = async () => {
-        const sysMsg = "You are a senior QA engineer. Return ONLY a raw JSON array of issues. No markdown formatting. Do not include '```json' code fences.";
-        const messages = [
-            { role: "system", content: sysMsg },
-            { role: "user", content: fullPrompt }
-        ];
-        const model = (modelOverride && modelOverride.startsWith('deepseek')) ? modelOverride : settings.deepseekModel;
-        const raw = await callDeepSeek(settings.deepseekKey, model, messages, true);
-        
-        // Cleanup response if DeepSeek adds markdown
-        let clean = raw.trim();
-        if (clean.startsWith('```')) {
-            clean = clean.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+    const strategy = getProviderStrategy(settings, providerOverride);
+    
+    // Define Schema for Gemini (ignored by others usually)
+    const schema: Schema = {
+        type: Type.ARRAY,
+        items: {
+            type: Type.OBJECT,
+            properties: {
+            severity: { type: Type.STRING, enum: ["High", "Medium", "Low", "Info"] },
+            line: { type: Type.INTEGER },
+            issue: { type: Type.STRING },
+            suggestion: { type: Type.STRING }
+            },
+            required: ["severity", "issue", "suggestion"]
         }
-        return clean;
     };
 
     try {
-        return await runWithFallback(settings, deepSeekTask, geminiTask);
+        const result = await strategy.generate({
+            prompt: fullPrompt,
+            systemInstruction: "You are a senior QA engineer. Be strict. Return a raw JSON array of issues. No Markdown.",
+            model: modelOverride,
+            responseSchema: schema
+        });
+        
+        let text = result.text.trim();
+        // Cleanup markdown if present (common with DeepSeek/Qwen even in JSON mode)
+        if (text.startsWith('```')) {
+            text = text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+        return text;
     } catch (e: any) {
-         console.error("Check Error:", e);
-         // Return a structured error so the UI handles it gracefully
-         return JSON.stringify([{ severity: "High", line: 0, issue: "Analysis Failed", suggestion: e.message }]);
+        console.error("Check Error:", e);
+        return JSON.stringify([{ severity: "High", line: 0, issue: "Analysis Failed", suggestion: e.message }]);
     }
 };
 
-export const simulateExecution = async (code: string, settings: AISettings, inputs: string = "", modelOverride?: string): Promise<string> => {
+export const simulateExecution = async (code: string, settings: AISettings, inputs: string = "", modelOverride?: string, providerOverride?: AIProvider): Promise<string> => {
     const fullPrompt = `
       Please act as a code interpreter. Simulate the execution of the following code.
       
@@ -314,27 +304,11 @@ export const simulateExecution = async (code: string, settings: AISettings, inpu
       Show the console output or return value exactly as it would appear. Do not explain the code, just show the runtime output.
     `;
 
-    const geminiTask = async () => {
-        const envKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
-        const apiKey = settings.geminiKey || envKey || '';
-        if (!apiKey) throw new Error("Gemini API Key is missing");
-        const ai = getGeminiClient(apiKey);
-        const model = (modelOverride && modelOverride.startsWith('gemini')) ? modelOverride : GEMINI_CODE_MODEL;
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: fullPrompt,
-        });
-        return response.text || "No output simulated.";
-    };
-
-    const deepSeekTask = async () => {
-         const messages = [
-            { role: "system", content: "You are a terminal emulator. Output raw logs only." },
-            { role: "user", content: fullPrompt }
-        ];
-        const model = (modelOverride && modelOverride.startsWith('deepseek')) ? modelOverride : settings.deepseekModel;
-        return await callDeepSeek(settings.deepseekKey, model, messages);
-    };
-
-    return runWithFallback(settings, deepSeekTask, geminiTask);
+    const strategy = getProviderStrategy(settings, providerOverride);
+    const result = await strategy.generate({
+        prompt: fullPrompt,
+        systemInstruction: "You are a terminal emulator. Output raw logs only.",
+        model: modelOverride
+    });
+    return result.text;
 };

@@ -1,4 +1,5 @@
 
+
 export enum NodeType {
   TRIGGER = 'TRIGGER',
   GEMINI_GENERATE = 'GEMINI_GENERATE',
@@ -10,29 +11,38 @@ export enum NodeType {
   VS_CODE = 'VS_CODE',
   TODO_LIST = 'TODO_LIST',
   NOTE = 'NOTE',
-  DIFF = 'DIFF'
+  DIFF = 'DIFF',
+  APPROVAL = 'APPROVAL'
 }
 
 export type NodeShape = 'rectangle' | 'square' | 'circle';
 
+export type AIProvider = 'gemini' | 'deepseek' | 'qwen' | 'openai';
+
 export interface NodeData {
   label: string;
-  shape?: NodeShape; // 'rectangle' | 'square' | 'circle'
-  prompt?: string; // For AI nodes, or path for VS Code, or Command for Shell. For Diff: Manual 'Original' text.
-  todo?: string; // For Task Lists or Manual Instructions
-  dependencies?: string; // Comma separated list of python packages
-  code?: string; // For output or static code
+  shape?: NodeShape;
+  prompt?: string;
+  todo?: string;
+  dependencies?: string;
+  code?: string;
   systemInstruction?: string;
-  model?: string;
-  useAiSimulation?: boolean; // For Shell Node: Use AI to mock output if in browser
-  output?: string; // The raw text result
-  files?: Record<string, string>; // NEW: Structured file storage { 'filename.ext': 'content' }
-  status?: 'idle' | 'running' | 'success' | 'error';
+  
+  // AI Config Per Node
+  provider?: AIProvider; // New: Override global provider
+  model?: string;        // Model specific to provider
+  
+  useAiSimulation?: boolean;
+  output?: string;
+  files?: Record<string, string>;
+  status?: 'idle' | 'running' | 'success' | 'error' | 'waiting';
   errorMessage?: string;
   
-  // Diff specific data
   diffOriginal?: string;
   diffModified?: string;
+
+  useSearch?: boolean;
+  groundingSources?: Array<{ title: string; uri: string }>;
 }
 
 export interface Node {
@@ -45,9 +55,9 @@ export interface Node {
 export interface Edge {
   id: string;
   source: string;
-  sourceHandle?: string; // 'top' | 'right' | 'bottom' | 'left'
+  sourceHandle?: string;
   target: string;
-  targetHandle?: string; // 'top' | 'right' | 'bottom' | 'left'
+  targetHandle?: string;
 }
 
 export interface WorkflowState {
@@ -57,13 +67,25 @@ export interface WorkflowState {
   isExecuting: boolean;
 }
 
-export type AIProvider = 'gemini' | 'deepseek';
-
 export interface AISettings {
-  provider: AIProvider;
+  provider: AIProvider; // Global active default
+
+  // Gemini
   geminiKey: string;
+
+  // DeepSeek
   deepseekKey: string;
-  deepseekModel: string; // e.g., 'deepseek-coder' or 'deepseek-chat'
+  deepseekModel: string;
+
+  // Qwen (via OpenAI Compatible Endpoint)
+  qwenKey: string;
+  qwenUrl: string; // e.g. https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+  qwenModel: string;
+
+  // Generic OpenAI
+  openaiKey: string;
+  openaiUrl: string;
+  openaiModel: string;
 }
 
 export const INITIAL_NODES: Node[] = [

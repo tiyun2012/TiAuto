@@ -1,9 +1,10 @@
 
+
 import React, { useRef, useState, useEffect } from 'react';
 import { Node, Edge, NodeType, NodeShape } from '../types';
 import NodeComponent from './NodeComponent';
 import { getPortPosition } from '../constants';
-import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical, FileDiff } from 'lucide-react';
+import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical, FileDiff, ThumbsUp } from 'lucide-react';
 
 interface CanvasProps {
   nodes: Node[];
@@ -15,7 +16,7 @@ interface CanvasProps {
   addNode: (type: NodeType, position: { x: number; y: number }) => void;
   onDeleteNode: (id: string) => void;
   onDeleteEdge: (id: string) => void;
-  onRunNode: (id: string) => void; // New prop for single node execution
+  onRunNode: (id: string, action?: string) => void; // New prop for single node execution
 }
 
 // Node definitions for the picker
@@ -24,6 +25,7 @@ const NODE_OPTIONS = [
   { type: NodeType.GEMINI_GENERATE, label: 'AI Generator', icon: FileCode, desc: 'Write code', color: 'text-purple-400' },
   { type: NodeType.GEMINI_CHECK, label: 'AI Security', icon: ShieldCheck, desc: 'Audit code', color: 'text-orange-400' },
   { type: NodeType.AI_UNIT_TEST, label: 'Unit Tests', icon: FlaskConical, desc: 'Generate Tests', color: 'text-cyan-400' },
+  { type: NodeType.APPROVAL, label: 'Approval', icon: ThumbsUp, desc: 'Wait for Human', color: 'text-rose-400' },
   { type: NodeType.SHELL_EXEC, label: 'Shell Command', icon: SquareTerminal, desc: 'CLI Execution', color: 'text-gray-200' },
   { type: NodeType.SIMULATE_RUN, label: 'Simulator', icon: Terminal, desc: 'AI Simulated Run', color: 'text-pink-400' },
   { type: NodeType.PYTHON_EXEC, label: 'Python Runner', icon: Binary, desc: 'Executes Python in Browser', color: 'text-yellow-400' },

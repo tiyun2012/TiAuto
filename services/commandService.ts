@@ -52,7 +52,8 @@ export const executeShellCommand = async (
     `;
     
     // We reuse generateCode from geminiService as it fits the "Text-to-Text" pattern
-    return await generateCode(prompt, "You are a terminal emulator. Output raw logs only.", settings);
+    const result = await generateCode(prompt, "You are a terminal emulator. Output raw logs only.", settings);
+    return result.text;
   } else {
     // Static Message
     return `[System] Browser Environment Detected.

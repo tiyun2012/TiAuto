@@ -1,7 +1,8 @@
 
+
 import React from 'react';
 import { NodeType } from '../types';
-import { Play, Sparkles, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, SquareTerminal, FlaskConical, FileDiff } from 'lucide-react';
+import { Play, Sparkles, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, SquareTerminal, FlaskConical, FileDiff, ThumbsUp } from 'lucide-react';
 
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
@@ -35,6 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
         <ToolButton 
             icon={<Play />} 
             label="Trigger" 
+            tooltip="Starts the flow manually."
             color="text-green-400" 
             onClick={() => onAddNode(NodeType.TRIGGER)}
             type={NodeType.TRIGGER} 
@@ -42,6 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
         <ToolButton 
             icon={<Sparkles />} 
             label="Gen" 
+            tooltip="Generates Code/Text (Creative)."
             color="text-purple-400" 
             onClick={() => onAddNode(NodeType.GEMINI_GENERATE)}
             type={NodeType.GEMINI_GENERATE} 
@@ -49,13 +52,23 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
         <ToolButton 
             icon={<ShieldCheck />} 
             label="Check" 
+            tooltip="Audits Code for Bugs/Security."
             color="text-orange-400" 
             onClick={() => onAddNode(NodeType.GEMINI_CHECK)}
             type={NodeType.GEMINI_CHECK} 
         />
         <ToolButton 
+            icon={<ThumbsUp />} 
+            label="Confirm" 
+            tooltip="Human Approval Step."
+            color="text-rose-400" 
+            onClick={() => onAddNode(NodeType.APPROVAL)}
+            type={NodeType.APPROVAL} 
+        />
+        <ToolButton 
             icon={<FlaskConical />} 
             label="Tests" 
+            tooltip="Writes Unit Tests (Pytest)."
             color="text-cyan-400" 
             onClick={() => onAddNode(NodeType.AI_UNIT_TEST)}
             type={NodeType.AI_UNIT_TEST} 
@@ -63,6 +76,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
          <ToolButton 
             icon={<SquareTerminal />} 
             label="Shell" 
+            tooltip="Simulates Command Line."
             color="text-gray-200" 
             onClick={() => onAddNode(NodeType.SHELL_EXEC)}
             type={NodeType.SHELL_EXEC} 
@@ -70,6 +84,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
         <ToolButton 
             icon={<Terminal />} 
             label="Sim" 
+            tooltip="Predicts execution output (Safe)."
             color="text-pink-400" 
             onClick={() => onAddNode(NodeType.SIMULATE_RUN)}
             type={NodeType.SIMULATE_RUN} 
@@ -77,6 +92,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
          <ToolButton 
             icon={<Binary />} 
             label="Py Run" 
+            tooltip="Executes Python in Browser."
             color="text-yellow-400" 
             onClick={() => onAddNode(NodeType.PYTHON_EXEC)}
             type={NodeType.PYTHON_EXEC} 
@@ -84,6 +100,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
         <ToolButton 
             icon={<FileDiff />} 
             label="Diff" 
+            tooltip="Compares two inputs."
             color="text-indigo-400" 
             onClick={() => onAddNode(NodeType.DIFF)}
             type={NodeType.DIFF} 
@@ -91,6 +108,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
         <ToolButton 
             icon={<ListTodo />} 
             label="Tasks" 
+            tooltip="Manual Checklist."
             color="text-teal-400" 
             onClick={() => onAddNode(NodeType.TODO_LIST)}
             type={NodeType.TODO_LIST} 
@@ -98,6 +116,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
         <ToolButton 
             icon={<Laptop />} 
             label="VS Code" 
+            tooltip="Opens local VS Code."
             color="text-blue-400" 
             onClick={() => onAddNode(NodeType.VS_CODE)}
             type={NodeType.VS_CODE} 
@@ -105,6 +124,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
         <ToolButton 
             icon={<StickyNote />} 
             label="Note" 
+            tooltip="Add sticky notes."
             color="text-yellow-400" 
             onClick={() => onAddNode(NodeType.NOTE)}
             type={NodeType.NOTE} 
@@ -114,14 +134,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
   );
 };
 
-const ToolButton = ({ icon, label, onClick, color, type }: { icon: any, label: string, onClick: () => void, color: string, type: NodeType }) => {
+const ToolButton = ({ icon, label, tooltip, onClick, color, type }: { icon: any, label: string, tooltip: string, onClick: () => void, color: string, type: NodeType }) => {
     const handleDragStart = (e: React.DragEvent) => {
         e.dataTransfer.setData('application/flowgen-node', type);
         e.dataTransfer.effectAllowed = 'move';
     };
 
     const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST].includes(type);
-    const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF].includes(type);
+    const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL].includes(type);
 
     return (
         <div 
@@ -140,8 +160,9 @@ const ToolButton = ({ icon, label, onClick, color, type }: { icon: any, label: s
             <span className="text-[10px] font-medium text-gray-500 group-hover:text-gray-300">{label}</span>
             
             {/* Tooltip */}
-            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-white opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">
-                Add {label} Node
+            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl text-xs text-white opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-all duration-200">
+                <span className="font-bold block mb-0.5 text-gray-300">{label}</span>
+                <span className="text-gray-500">{tooltip}</span>
             </div>
         </div>
     );
