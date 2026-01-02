@@ -1,5 +1,4 @@
 
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Canvas from './components/Canvas';
 import Sidebar from './components/Sidebar';
@@ -22,6 +21,10 @@ export default function App() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showJsonView, setShowJsonView] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Reference to nodes state for async access in loops
+  const nodesRef = useRef(nodes);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
 
   // Expanded AI Settings State
   const [aiSettings, setAiSettings] = useState<AISettings>({
@@ -258,14 +261,32 @@ export default function App() {
     setToast({ message: "Created Auto-Fix Node", type: "success" });
   };
 
+  const getDownstreamNodes = (nodeId: string, currentNodes: Node[], currentEdges: Edge[]) => {
+      const downstreamIds = new Set<string>();
+      const queue = [nodeId];
+      
+      while(queue.length > 0) {
+          const current = queue.shift()!;
+          const children = currentEdges.filter(e => e.source === current).map(e => e.target);
+          children.forEach(child => {
+              if(!downstreamIds.has(child)) {
+                  downstreamIds.add(child);
+                  queue.push(child);
+              }
+          });
+      }
+      return downstreamIds;
+  };
+
   // Execution
   const executeGraph = async (startNodes: Node[]) => {
     setIsExecuting(true);
-    let currentNodes = [...nodes];
-    await runExecutionLoop(startNodes, currentNodes);
+    // Use nodesRef.current to get the most up-to-date state for execution
+    await runExecutionLoop(startNodes, nodesRef.current);
   };
 
-  const runExecutionLoop = async (queue: Node[], currentNodes: Node[]) => {
+  const runExecutionLoop = async (queue: Node[], initialNodes: Node[]) => {
+      let currentNodes = [...initialNodes];
       const visited = new Set<string>();
       const executed = new Set<string>();
       
@@ -276,7 +297,6 @@ export default function App() {
         
         // If node already successfully executed this run, skip re-execution but check children
         if (executed.has(currentNode.id) || currentNode.data.status === 'success') {
-             // Just add children to queue
              const childrenEdges = edges.filter(e => e.source === currentNode.id);
              childrenEdges.forEach(e => {
                  const childNode = currentNodes.find(n => n.id === e.target);
@@ -297,7 +317,9 @@ export default function App() {
 
         try {
             await executeNode(currentNode, currentNodes, edges, aiSettings, (id, data) => {
+                // Update local loop state
                 currentNodes = currentNodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n);
+                // Update React state
                 setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n));
             });
         } catch (error: any) {
@@ -343,19 +365,79 @@ export default function App() {
   const handleRunWorkflow = async (resume = false) => {
     if (isExecuting) return;
     setToast({ message: resume ? "Resuming Workflow..." : "Workflow Started...", type: "info" });
+    setIsExecuting(true);
     
-    // If not resuming, reset all to idle
+    // 1. Reset State (if not resuming)
     if (!resume) {
-        setNodes(prev => prev.map(n => ({ ...n, data: { ...n.data, status: 'idle', errorMessage: undefined, currentIteration: 0, feedback: undefined } })));
+        setNodes(prev => prev.map(n => ({ 
+            ...n, 
+            data: { 
+                ...n.data, 
+                status: 'idle', 
+                errorMessage: undefined, 
+                currentIteration: 0, 
+                feedback: undefined,
+                iteratorIndex: 0,
+                iteratorFinished: false,
+                iteratorTotal: 0
+            } 
+        })));
+        // Allow state to settle before starting
+        await new Promise(r => setTimeout(r, 100));
     }
 
     setTimeout(async () => {
         try {
-            // If resuming, start from Approval nodes that are success or standard triggers
-            const startNodes = nodes.filter(n => n.type === NodeType.TRIGGER || (resume && n.type === NodeType.APPROVAL && n.data.status === 'success'));
-            if (startNodes.length === 0) throw new Error("No Start Trigger found.");
-            await executeGraph(startNodes);
-            setToast({ message: "Workflow Completed.", type: "success" });
+            let activeIteratorId: string | null = null;
+            let flowComplete = false;
+            let cycleCount = 0;
+            const MAX_CYCLES = 50; // Safety limit
+
+            while (!flowComplete && cycleCount < MAX_CYCLES) {
+                cycleCount++;
+                
+                let startNodes: Node[] = [];
+
+                if (activeIteratorId) {
+                    // Loop Mode: Start from the Iterator
+                    const iterNode = nodesRef.current.find(n => n.id === activeIteratorId);
+                    if (iterNode) startNodes = [iterNode];
+                    
+                    // Reset downstream nodes to 'idle' so they can run again
+                    setNodes(prev => prev.map(n => {
+                        // Keep Iterator and success/approval/architect/index history intact
+                        if (n.id === activeIteratorId || n.type === NodeType.APPROVAL || n.type === NodeType.PROJECT_INDEX || n.type === NodeType.ARCHITECT) return n;
+                        // Reset generator/writer/check nodes for the next pass
+                        return { ...n, data: { ...n.data, status: 'idle', output: undefined, files: undefined } };
+                    }));
+                    
+                    await new Promise(r => setTimeout(r, 200)); // Wait for reset
+                } else {
+                    // Standard Mode: Start from Triggers
+                    startNodes = nodesRef.current.filter(n => n.type === NodeType.TRIGGER || (resume && n.type === NodeType.APPROVAL && n.data.status === 'success'));
+                }
+
+                if (startNodes.length === 0 && cycleCount === 1) throw new Error("No Start Trigger found.");
+                if (startNodes.length === 0) break; 
+
+                // Execute Graph (Linear Pass)
+                await executeGraph(startNodes);
+                
+                // Check if we entered an iterator phase (The "Auto" Logic)
+                const iterator = nodesRef.current.find(n => n.type === NodeType.TASK_ITERATOR);
+                
+                if (iterator && !iterator.data.iteratorFinished && iterator.data.status === 'success') {
+                    activeIteratorId = iterator.id;
+                    setToast({ message: `Cycle ${iterator.data.iteratorIndex} / ${iterator.data.iteratorTotal || '?'}: Processing...`, type: 'info' });
+                    // Loop continues...
+                } else {
+                    flowComplete = true;
+                }
+            }
+            
+            if (cycleCount >= MAX_CYCLES) setToast({ message: "Max cycles reached.", type: 'error' });
+            else setToast({ message: "Workflow Completed.", type: "success" });
+
         } catch (error: any) {
             if (error.message !== "WAIT_FOR_APPROVAL") {
                  setToast({ message: error.message, type: "error" });
