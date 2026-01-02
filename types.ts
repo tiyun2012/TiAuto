@@ -57,6 +57,7 @@ export interface NodeData {
   // Git Config
   gitCommand?: 'status' | 'add' | 'commit' | 'push' | 'log';
   gitMessage?: string;
+  gitStopOnDirty?: boolean;
 
   useAiSimulation?: boolean;
   output?: string;

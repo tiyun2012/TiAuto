@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Node, NodeType, NodeShape, AISettings, AIProvider } from '../types';
 import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2, AlertTriangle, AlertCircle, Info, CheckCircle2, Bot, Brain, Globe, ExternalLink, Wrench, Server, Zap, Lightbulb, BookOpen, Download, FileCode, FileJson, FileType, Code2, Repeat, FolderOpen, Users, Layers, GitFork, Network, Save, Briefcase, GitBranch, ArrowRightLeft } from 'lucide-react';
@@ -485,6 +486,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
                         <option value="log">Log</option>
                     </select>
                 </div>
+                
+                {node.data.gitCommand === 'status' && (
+                     <div className="flex items-center gap-2 mt-2">
+                        <input 
+                            type="checkbox" 
+                            checked={node.data.gitStopOnDirty || false}
+                            onChange={(e) => onUpdateNode(node.id, { gitStopOnDirty: e.target.checked })}
+                            className="rounded bg-gray-700 border-gray-600 text-orange-500"
+                        />
+                        <span className="text-xs text-orange-300">Stop workflow if dirty</span>
+                    </div>
+                )}
+
                 {node.data.gitCommand === 'commit' && (
                     <div className="space-y-2">
                         <label className="text-xs font-bold text-orange-400 uppercase tracking-wider">Message</label>

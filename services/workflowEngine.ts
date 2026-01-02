@@ -155,11 +155,24 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
             fullCmd = `git add .`;
         }
 
+        let output = "";
         if (node.data.useLocalBridge) {
-            return await bridgeExecute(fullCmd, aiSettings);
+            output = await bridgeExecute(fullCmd, aiSettings);
         } else {
-            return `[Simulation] Git Command: ${fullCmd}`;
+            output = `[Simulation] Git Command: ${fullCmd}`;
         }
+
+        // New Safety Check Logic
+        if (cmd === 'status' && node.data.gitStopOnDirty) {
+             const lower = output.toLowerCase();
+             // Standard git status clean messages
+             const isClean = lower.includes("nothing to commit") || lower.includes("working tree clean");
+             if (!isClean) {
+                 throw new Error("Git Status: Working directory is dirty. Please commit changes or clean working tree.");
+             }
+        }
+
+        return output;
     },
 
     [NodeType.ARCHITECT]: async ({ node, textContext, vfsString, aiSettings }) => {
@@ -197,8 +210,8 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
         let tasks: any[] = [];
         try {
             // Extract JSON
-            const jsonMatch = parentOutput.match(/```json\s*([\s\S]*?)\s*```/) || parentOutput.match(/\{[\s\S]*\}/);
-            const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : parentOutput;
+            const jsonMatch = parentOutput.match(/```json\s*([\s\S]*?)\s*```/);
+            const jsonStr = jsonMatch ? jsonMatch[1] : (parentOutput.match(/\{[\s\S]*\}/)?.[0] || "");
             const parsed = JSON.parse(jsonStr);
             tasks = parsed.tasks || [];
         } catch (e) {
@@ -222,13 +235,10 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
 
         // 3. Update State for this run
         // We set the output to be the instruction for the *Next* node (Generator)
-        // We also flag that we are NOT done if there are more tasks.
         updateNodeData(node.id, { 
             iteratorIndex: nextIndex,
             iteratorTotal: tasks.length,
             iteratorFinished: isFinished,
-            // If not finished, we want the engine to re-visit us? 
-            // The engine doesn't support auto-revisit yet, so we rely on the App layer to check "iteratorFinished".
         });
 
         return `TASK (${currentIndex + 1}/${tasks.length}):\nFile: ${currentTask.filename}\nInstruction: ${currentTask.instruction}`;

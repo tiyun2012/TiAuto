@@ -1,4 +1,5 @@
 
+
 import { Node, Edge, NodeType } from '../types';
 
 export interface Template {
@@ -9,6 +10,174 @@ export interface Template {
 }
 
 export const APP_TEMPLATES: Template[] = [
+  {
+    name: "ti3d Autonomous Manager",
+    description: "Safe, senior-level workflow for ti3d. Enforces ECS architecture, uses AI Debate for code review, and performs atomic git commits per file.",
+    nodes: [
+      // PHASE 1: SAFETY & SETUP
+      {
+        id: 'ti-trigger',
+        type: NodeType.TRIGGER,
+        position: { x: 50, y: 100 },
+        data: { label: 'Start Task', status: 'idle', shape: 'circle' }
+      },
+      {
+        id: 'ti-git-status',
+        type: NodeType.GIT_CONTROL,
+        position: { x: 250, y: 100 },
+        data: { 
+          label: 'Check Git Status', 
+          shape: 'rectangle', 
+          status: 'idle',
+          gitCommand: 'status',
+          gitStopOnDirty: true,
+          useLocalBridge: true, // Requires Bridge
+          prompt: "Ensure working directory is clean before starting."
+        }
+      },
+      {
+        id: 'ti-index',
+        type: NodeType.PROJECT_INDEX,
+        position: { x: 450, y: 100 },
+        data: { 
+          label: 'Scan Project', 
+          shape: 'rectangle', 
+          status: 'idle',
+          useLocalBridge: true,
+          localPath: '.'
+        }
+      },
+      // PHASE 2: ARCHITECT
+      {
+        id: 'ti-architect',
+        type: NodeType.ARCHITECT,
+        position: { x: 650, y: 100 },
+        data: { 
+          label: 'ECS Architect', 
+          shape: 'square', 
+          status: 'idle',
+          provider: 'deepseek', // DeepSeek is great for logic/planning
+          prompt: `You are the Lead Engine Architect for ti3d.
+User Goal: Implement the requested feature.
+
+STRICT ARCHITECTURE RULES:
+1. ECS Pattern Only: Logic belongs in Systems. State belongs in Components. Do NOT create Object-Oriented classes with methods.
+2. React UI: Use React.memo() and careful dependency management to prevent WebGL frame drops.
+3. Directory Structure: Respect the existing /src/services/ecs folder structure.
+
+Output a JSON task list for every file that needs to be created or modified.`
+        }
+      },
+      // PHASE 3: EXECUTION LOOP
+      {
+        id: 'ti-iterator',
+        type: NodeType.TASK_ITERATOR,
+        position: { x: 50, y: 400 },
+        data: { 
+          label: 'Execution Loop', 
+          shape: 'square', 
+          status: 'idle',
+          iteratorIndex: 0
+        }
+      },
+      {
+        id: 'ti-read',
+        type: NodeType.READ_FILE,
+        position: { x: 300, y: 400 },
+        data: { 
+          label: 'Read Context', 
+          shape: 'rectangle', 
+          status: 'idle',
+          useLocalBridge: true,
+          // Empty path implies dynamic reading based on Iterator output
+          localPath: '' 
+        }
+      },
+      {
+        id: 'ti-gen',
+        type: NodeType.GEMINI_GENERATE,
+        position: { x: 550, y: 400 },
+        data: { 
+          label: 'Write ECS Code', 
+          shape: 'square', 
+          status: 'idle',
+          provider: 'gemini', // Gemini 1.5 Pro has large context window
+          model: 'gemini-1.5-pro',
+          prompt: "Implement the file content based on the Architect's instructions. Ensure code is performant and strictly typed."
+        }
+      },
+      {
+        id: 'ti-debate',
+        type: NodeType.AI_DEBATE,
+        position: { x: 800, y: 400 },
+        data: { 
+          label: 'Strict Code Review', 
+          shape: 'square', 
+          status: 'idle',
+          personaA: "ECS Purist",
+          personaB: "Performance Optimizer",
+          debateRounds: 2,
+          prompt: "Review the generated code. \n1. Does it violate ECS principles (e.g., logic inside a component)? \n2. Are there React anti-patterns (e.g., missing dependency arrays)? \n3. Are there potential memory leaks?"
+        }
+      },
+      // PHASE 4: HUMAN GATE & SAVE
+      {
+        id: 'ti-approve',
+        type: NodeType.APPROVAL,
+        position: { x: 50, y: 700 },
+        data: { 
+          label: 'Human Gate', 
+          shape: 'rectangle', 
+          status: 'idle'
+        }
+      },
+      {
+        id: 'ti-write',
+        type: NodeType.WRITE_FILE,
+        position: { x: 300, y: 700 },
+        data: { 
+          label: 'Save File', 
+          shape: 'rectangle', 
+          status: 'idle',
+          useLocalBridge: true,
+          // Empty path implies dynamic writing based on Iterator/Gen output
+          localPath: ''
+        }
+      },
+      {
+        id: 'ti-commit',
+        type: NodeType.GIT_CONTROL,
+        position: { x: 550, y: 700 },
+        data: { 
+          label: 'Atomic Commit', 
+          shape: 'rectangle', 
+          status: 'idle',
+          gitCommand: 'commit',
+          gitMessage: 'AI: Implemented atomic task',
+          useLocalBridge: true
+        }
+      }
+    ],
+    edges: [
+      // Setup Phase
+      { id: 'te-1', source: 'ti-trigger', target: 'ti-git-status' },
+      { id: 'te-2', source: 'ti-git-status', target: 'ti-index' },
+      { id: 'te-3', source: 'ti-index', target: 'ti-architect' },
+      
+      // Loop Start
+      { id: 'te-4', source: 'ti-architect', target: 'ti-iterator' },
+      { id: 'te-5', source: 'ti-iterator', target: 'ti-read' },
+      
+      // Coding Phase
+      { id: 'te-6', source: 'ti-read', target: 'ti-gen' },
+      { id: 'te-7', source: 'ti-gen', target: 'ti-debate' },
+      
+      // Review & Save
+      { id: 'te-8', source: 'ti-debate', target: 'ti-approve' },
+      { id: 'te-9', source: 'ti-approve', target: 'ti-write' },
+      { id: 'te-10', source: 'ti-write', target: 'ti-commit' }
+    ]
+  },
   {
     name: "Python Data Analysis",
     description: "Generates a dummy CSV dataset and uses Python (Pandas) to analyze it. Tests VFS and Pyodide.",
