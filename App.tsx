@@ -1,5 +1,4 @@
 
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Canvas from './components/Canvas';
 import Sidebar from './components/Sidebar';
@@ -22,6 +21,10 @@ export default function App() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showJsonView, setShowJsonView] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Reference to nodes state for async access in loops
+  const nodesRef = useRef(nodes);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
 
   // Expanded AI Settings State
   const [aiSettings, setAiSettings] = useState<AISettings>({
@@ -276,11 +279,13 @@ export default function App() {
   };
 
   // Execution
-  const executeGraph = async (startNodes: Node[], initialNodes: Node[]): Promise<Node[]> => {
-    return await runExecutionLoop(startNodes, initialNodes);
+  const executeGraph = async (startNodes: Node[], initialNodes: Node[]) => {
+    setIsExecuting(true);
+    // Use initialNodes passed from loop to ensure fresh state
+    await runExecutionLoop(startNodes, initialNodes);
   };
 
-  const runExecutionLoop = async (queue: Node[], initialNodes: Node[]): Promise<Node[]> => {
+  const runExecutionLoop = async (queue: Node[], initialNodes: Node[]) => {
       let currentNodes = [...initialNodes];
       const visited = new Set<string>();
       const executed = new Set<string>();
@@ -313,7 +318,7 @@ export default function App() {
         try {
             await executeNode(currentNode, currentNodes, edges, aiSettings, (id, data) => {
                 currentNodes = currentNodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n);
-                // Also update React state for visual feedback
+                // Sync with React state for UI
                 setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n));
             });
         } catch (error: any) {
@@ -354,7 +359,6 @@ export default function App() {
         
         await new Promise(r => setTimeout(r, 600));
       }
-      return currentNodes;
   };
 
   const handleRunWorkflow = async (resume = false) => {
@@ -363,57 +367,95 @@ export default function App() {
     setIsExecuting(true);
     
     // If not resuming, reset all to idle
-    let workingNodes = [...nodes];
     if (!resume) {
-        workingNodes = workingNodes.map(n => ({ ...n, data: { ...n.data, status: 'idle', errorMessage: undefined, currentIteration: 0, feedback: undefined } }));
-        setNodes(workingNodes);
+        setNodes(prev => prev.map(n => ({ 
+            ...n, 
+            data: { 
+                ...n.data, 
+                status: 'idle', 
+                errorMessage: undefined, 
+                currentIteration: 0, 
+                feedback: undefined,
+                iteratorIndex: 0,
+                iteratorFinished: false 
+            } 
+        })));
     }
 
     setTimeout(async () => {
         try {
+            let activeIteratorId: string | null = null;
             let flowComplete = false;
-            let currentStartNodes = workingNodes.filter(n => n.type === NodeType.TRIGGER || (resume && n.type === NodeType.APPROVAL && n.data.status === 'success'));
-            if (currentStartNodes.length === 0 && !resume) throw new Error("No Start Trigger found.");
-            
-            // "Engine Driver" Loop
-            while(!flowComplete) {
-                // Run Graph
-                workingNodes = await executeGraph(currentStartNodes, workingNodes);
+            let cycleCount = 0;
+            const MAX_CYCLES = 50; // Safety limit
+
+            while (!flowComplete && cycleCount < MAX_CYCLES) {
+                cycleCount++;
                 
-                // Check for Active Iterator
-                const iterator = workingNodes.find(n => n.type === NodeType.TASK_ITERATOR);
+                // Fetch fresh state from ref
+                let currentNodes = nodesRef.current;
+                let startNodes: Node[] = [];
+
+                if (activeIteratorId) {
+                    const iterator = currentNodes.find(n => n.id === activeIteratorId);
+                    
+                    // Logic: If iterator executed successfully but hasn't finished its list, reset downstream and loop
+                    if (iterator && !iterator.data.iteratorFinished && iterator.data.status === 'success') {
+                        
+                        const downstreamIds = getDownstreamNodes(activeIteratorId, currentNodes, edges);
+                        
+                        // Prepare state for next cycle: downstream idle, iterator idle
+                        const nextNodes = currentNodes.map(n => {
+                            if (downstreamIds.has(n.id) && n.id !== activeIteratorId) {
+                                return { ...n, data: { ...n.data, status: 'idle', output: undefined, files: undefined } };
+                            }
+                            if (n.id === activeIteratorId) {
+                                return { ...n, data: { ...n.data, status: 'idle' } };
+                            }
+                            return n;
+                        });
+                        
+                        setNodes(nextNodes);
+                        // Wait for state propagation
+                        await new Promise(r => setTimeout(r, 100));
+                        currentNodes = nodesRef.current;
+                        
+                        const readyIterator = currentNodes.find(n => n.id === activeIteratorId);
+                        if (readyIterator) startNodes = [readyIterator];
+                        
+                        setToast({ message: `Cycle ${cycleCount}: Next Task...`, type: 'info' });
+                    } else {
+                        flowComplete = true;
+                        continue;
+                    }
+                } else {
+                    // First run or Resume
+                    startNodes = currentNodes.filter(n => n.type === NodeType.TRIGGER || (resume && n.type === NodeType.APPROVAL && n.data.status === 'success'));
+                }
+
+                if (startNodes.length === 0) {
+                     if (!activeIteratorId && !resume) throw new Error("No Start Trigger found.");
+                     else break;
+                }
+
+                // Execute Graph (Linear Pass)
+                await executeGraph(startNodes, currentNodes);
+                
+                // Check if we entered an iterator phase
+                currentNodes = nodesRef.current;
+                const iterator = currentNodes.find(n => n.type === NodeType.TASK_ITERATOR);
                 
                 if (iterator && !iterator.data.iteratorFinished && iterator.data.status === 'success') {
-                     // Iterator is active and just finished a cycle (status success)
-                     // Reset downstream nodes to idle to allow re-execution
-                     const toReset = getDownstreamNodes(iterator.id, workingNodes, edges);
-                     
-                     workingNodes = workingNodes.map(n => {
-                         if (toReset.has(n.id)) {
-                             return { ...n, data: { ...n.data, status: 'idle', output: undefined, files: undefined } };
-                         }
-                         // Also reset the iterator status to idle so it can run again (increment index)
-                         if (n.id === iterator.id) {
-                              return { ...n, data: { ...n.data, status: 'idle' } };
-                         }
-                         return n;
-                     });
-                     
-                     // Sync UI
-                     setNodes([...workingNodes]);
-                     
-                     // Next run starts from Iterator
-                     const nextIterator = workingNodes.find(n => n.id === iterator.id);
-                     if (nextIterator) currentStartNodes = [nextIterator];
-                     
-                     console.log(`[Engine Driver] Iterator active. Index: ${iterator.data.iteratorIndex}. Looping...`);
-                     await new Promise(r => setTimeout(r, 1000));
+                    activeIteratorId = iterator.id;
+                    // Loop continues
                 } else {
                     flowComplete = true;
                 }
             }
             
-            setToast({ message: "Workflow Completed.", type: "success" });
+            if (cycleCount >= MAX_CYCLES) setToast({ message: "Max cycles reached.", type: 'error' });
+            else setToast({ message: "Workflow Completed.", type: "success" });
+
         } catch (error: any) {
             if (error.message !== "WAIT_FOR_APPROVAL") {
                  setToast({ message: error.message, type: "error" });
