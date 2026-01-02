@@ -279,10 +279,10 @@ export default function App() {
   };
 
   // Execution
-  const executeGraph = async (startNodes: Node[]) => {
+  const executeGraph = async (startNodes: Node[], initialNodes: Node[]) => {
     setIsExecuting(true);
     // Use nodesRef.current to get the most up-to-date state for execution
-    await runExecutionLoop(startNodes, nodesRef.current);
+    await runExecutionLoop(startNodes, initialNodes);
   };
 
   const runExecutionLoop = async (queue: Node[], initialNodes: Node[]) => {
@@ -396,35 +396,51 @@ export default function App() {
             while (!flowComplete && cycleCount < MAX_CYCLES) {
                 cycleCount++;
                 
+                // Fetch fresh state from ref at start of loop
+                let currentNodes = nodesRef.current;
                 let startNodes: Node[] = [];
 
                 if (activeIteratorId) {
                     // Loop Mode: Start from the Iterator
-                    const iterNode = nodesRef.current.find(n => n.id === activeIteratorId);
-                    if (iterNode) startNodes = [iterNode];
+                    
+                    const downstreamIds = getDownstreamNodes(activeIteratorId, currentNodes, edges);
                     
                     // Reset downstream nodes to 'idle' so they can run again
                     setNodes(prev => prev.map(n => {
-                        // Keep Iterator and success/approval/architect/index history intact
-                        if (n.id === activeIteratorId || n.type === NodeType.APPROVAL || n.type === NodeType.PROJECT_INDEX || n.type === NodeType.ARCHITECT) return n;
-                        // Reset generator/writer/check nodes for the next pass
-                        return { ...n, data: { ...n.data, status: 'idle', output: undefined, files: undefined } };
+                        // Keep success/approval/architect/index history intact
+                        if (n.type === NodeType.APPROVAL || n.type === NodeType.PROJECT_INDEX || n.type === NodeType.ARCHITECT) return n;
+                        
+                        // Reset downstream + iterator itself to idle
+                        if (downstreamIds.has(n.id) || n.id === activeIteratorId) {
+                            return { ...n, data: { ...n.data, status: 'idle', output: undefined, files: undefined } };
+                        }
+                        return n;
                     }));
                     
-                    await new Promise(r => setTimeout(r, 200)); // Wait for reset
+                    // Allow UI to update and state to settle
+                    await new Promise(r => setTimeout(r, 400)); 
+                    
+                    // REFRESH state from ref after the wait
+                    currentNodes = nodesRef.current;
+                    
+                    const readyIterator = currentNodes.find(n => n.id === activeIteratorId);
+                    if (readyIterator) startNodes = [readyIterator];
+                    
                 } else {
                     // Standard Mode: Start from Triggers
-                    startNodes = nodesRef.current.filter(n => n.type === NodeType.TRIGGER || (resume && n.type === NodeType.APPROVAL && n.data.status === 'success'));
+                    startNodes = currentNodes.filter(n => n.type === NodeType.TRIGGER || (resume && n.type === NodeType.APPROVAL && n.data.status === 'success'));
                 }
 
                 if (startNodes.length === 0 && cycleCount === 1) throw new Error("No Start Trigger found.");
                 if (startNodes.length === 0) break; 
 
-                // Execute Graph (Linear Pass)
-                await executeGraph(startNodes);
+                // Execute Graph (Linear Pass) - Pass currentNodes to ensure we use the reset state
+                await executeGraph(startNodes, currentNodes);
                 
                 // Check if we entered an iterator phase (The "Auto" Logic)
-                const iterator = nodesRef.current.find(n => n.type === NodeType.TASK_ITERATOR);
+                // We must fetch fresh state again to see if Iterator finished
+                currentNodes = nodesRef.current;
+                const iterator = currentNodes.find(n => n.type === NodeType.TASK_ITERATOR);
                 
                 if (iterator && !iterator.data.iteratorFinished && iterator.data.status === 'success') {
                     activeIteratorId = iterator.id;
