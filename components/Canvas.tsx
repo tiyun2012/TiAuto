@@ -4,7 +4,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Node, Edge, NodeType, NodeShape } from '../types';
 import NodeComponent from './NodeComponent';
 import { getPortPosition } from '../constants';
-import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical, FileDiff, ThumbsUp, Repeat, FolderOpen, Users, Layers, GitFork, Save, GitBranch, Briefcase } from 'lucide-react';
+import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical, FileDiff, ThumbsUp, Repeat, FolderOpen, Users, Layers, GitFork, Save, GitBranch, Briefcase, FileSearch, ListRestart } from 'lucide-react';
 
 interface CanvasProps {
   nodes: Node[];
@@ -23,6 +23,8 @@ interface CanvasProps {
 const NODE_OPTIONS = [
   { type: NodeType.TRIGGER, label: 'Trigger', icon: Play, desc: 'Start workflow', color: 'text-green-400' },
   { type: NodeType.ARCHITECT, label: 'Architect', icon: Briefcase, desc: 'Plan project structure', color: 'text-emerald-300' },
+  { type: NodeType.TASK_ITERATOR, label: 'Task Iterator', icon: ListRestart, desc: 'Execute tasks sequentially', color: 'text-violet-300' },
+  { type: NodeType.PROJECT_INDEX, label: 'Project Index', icon: FileSearch, desc: 'List files in project', color: 'text-cyan-300' },
   { type: NodeType.READ_FILE, label: 'Read File', icon: FolderOpen, desc: 'Load local content', color: 'text-blue-300' },
   { type: NodeType.WRITE_FILE, label: 'Write File', icon: Save, desc: 'Save to disk (Bridge)', color: 'text-red-300' },
   { type: NodeType.GIT_CONTROL, label: 'Git Control', icon: GitBranch, desc: 'Commit & Push', color: 'text-orange-300' },

@@ -1,8 +1,7 @@
 
-
 import React, { useState } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff, Sparkles, Bot, Zap, Cloud, Server, ThumbsUp, ThumbsDown, CircleDashed, Files, Repeat, FolderOpen, Users, Layers, GitFork, Save, GitBranch, Briefcase } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff, Sparkles, Bot, Zap, Cloud, Server, ThumbsUp, ThumbsDown, CircleDashed, Files, Repeat, FolderOpen, Users, Layers, GitFork, Save, GitBranch, Briefcase, FileSearch, ListRestart } from 'lucide-react';
 import { NODE_DIMENSIONS } from '../constants';
 
 interface NodeComponentProps {
@@ -31,7 +30,9 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   const { type, data, id } = node;
   const shape: NodeShape = data.shape || 'square';
   const width = NODE_DIMENSIONS[shape].width;
-  const height = NODE_DIMENSIONS[shape].height;
+  // Notes have a taller default height in rectangle mode
+  const baseHeight = NODE_DIMENSIONS[shape].height;
+  const height = type === NodeType.NOTE && shape === 'rectangle' ? 140 : baseHeight;
 
   // Widget State
   const [showPopup, setShowPopup] = useState(false);
@@ -45,7 +46,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
 
   // Categorize
   const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST, NodeType.AI_DEBATE, NodeType.MULTI_CHECK, NodeType.ARCHITECT].includes(type);
-  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL, NodeType.LOOP, NodeType.READ_FILE, NodeType.ROUTER, NodeType.WRITE_FILE, NodeType.GIT_CONTROL].includes(type);
+  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL, NodeType.LOOP, NodeType.READ_FILE, NodeType.ROUTER, NodeType.WRITE_FILE, NodeType.GIT_CONTROL, NodeType.PROJECT_INDEX, NodeType.TASK_ITERATOR].includes(type);
   const isNote = type === NodeType.NOTE;
   const hasFiles = data.files && Object.keys(data.files).length > 0;
 
@@ -63,6 +64,20 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       borderClass = "border-emerald-300";
       titleColor = "text-emerald-300";
       portColor = "bg-emerald-300";
+      break;
+    case NodeType.PROJECT_INDEX:
+      Icon = FileSearch;
+      bgClass = "bg-gray-800";
+      borderClass = "border-cyan-300";
+      titleColor = "text-cyan-300";
+      portColor = "bg-cyan-300";
+      break;
+    case NodeType.TASK_ITERATOR:
+      Icon = ListRestart;
+      bgClass = "bg-gray-800";
+      borderClass = "border-violet-300";
+      titleColor = "text-violet-300";
+      portColor = "bg-violet-300";
       break;
     case NodeType.READ_FILE:
       Icon = FolderOpen;
@@ -307,6 +322,8 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       if (type === NodeType.ROUTER) return `Logic Result: ${data.output || 'Pending'}`;
       if (type === NodeType.ARCHITECT) return data.output ? "Plan generated." : "Planning...";
       if (type === NodeType.GIT_CONTROL) return `Git ${data.gitCommand || 'status'}`;
+      if (type === NodeType.PROJECT_INDEX) return "File Index Loaded";
+      if (type === NodeType.TASK_ITERATOR) return `Task ${data.iteratorIndex || 0} / ${data.iteratorTotal || '?'}`;
       if (data.output) return data.output;
       return data.prompt || "No details.";
   };
@@ -393,115 +410,43 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                 <div className="flex items-center gap-2 pl-2 flex-shrink-0">
                     {!isNote && isAI && (
                         <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gray-900/50 border border-gray-600/50 text-[9px] font-medium uppercase tracking-wider ${titleColor}`}>
-                             {/* Specific Icon for Rectangle Header */}
-                             {data.provider === 'deepseek' ? <Brain className="w-2.5 h-2.5" /> : 
-                              data.provider === 'gemini' ? <Sparkles className="w-2.5 h-2.5" /> : 
-                              data.provider === 'qwen' ? <Cloud className="w-2.5 h-2.5" /> :
-                              data.provider === 'openai' ? <Zap className="w-2.5 h-2.5" /> :
-                              <Bot className="w-2.5 h-2.5" />}
-                            <span>AI</span>
+                            {data.provider || 'AI'}
                         </div>
-                    )}
-                    {!isNote && isLogic && (
-                        <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gray-900/50 border border-gray-600/50 text-[9px] font-medium uppercase tracking-wider ${titleColor}`}>
-                            <Cpu className="w-2.5 h-2.5" />
-                            <span>Logic</span>
-                        </div>
-                    )}
-                    
-                    {/* Loop Iteration Badge */}
-                    {type === NodeType.LOOP && (
-                        <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-violet-900/50 border border-violet-600/50 text-[9px] font-medium uppercase tracking-wider text-violet-300`}>
-                            <Repeat className="w-2.5 h-2.5" />
-                            <span>{data.currentIteration || 0}/{data.maxIterations || 3}</span>
-                        </div>
-                    )}
-
-                    {/* Multi-file indicator Badge */}
-                    {!isNote && hasFiles && (
-                         <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-900/50 border border-blue-600/50 text-[9px] font-medium uppercase tracking-wider text-blue-300`}>
-                            <Files className="w-2.5 h-2.5" />
-                            <span>{Object.keys(data.files!).length}</span>
-                        </div>
-                    )}
-
-                    {renderStatus()}
-                    {!isNote && (
-                         <button 
-                            onClick={(e) => { e.stopPropagation(); setShowPopup(!showPopup); }}
-                            className={`p-1 rounded transition-colors ${
-                                showPopup 
-                                ? `${titleColor} bg-gray-800` 
-                                : `text-gray-500 hover:${titleColor} hover:bg-gray-800`
-                            }`}
-                         >
-                            {showPopup ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                         </button>
                     )}
                 </div>
             </div>
-
-            {isNote && (
-                 <div className="text-xs text-yellow-900 font-sans p-1 mt-1 flex-1 overflow-hidden">
-                    {data.prompt || "Note..."}
-                </div>
-            )}
+            
+            <div className={`mt-2 text-xs leading-relaxed line-clamp-2 ${isNote ? 'text-yellow-800 font-medium' : 'text-gray-400'}`}>
+               {getWidgetContent()}
+            </div>
+            
+            <div className="absolute top-2 right-2">
+                {renderStatus()}
+            </div>
         </div>
       );
   };
 
   return (
-    <div
-      className={baseClasses}
-      style={{ 
-        left: node.position.x, 
-        top: node.position.y,
-        width: width,
-        height: isNote && shape === 'rectangle' ? 140 : height,
-        boxSizing: 'border-box'
-      }}
-      onMouseDown={(e) => onMouseDown(e, node.id)}
-      onContextMenu={(e) => onContextMenu(e, node.id)}
+    <div 
+        className={baseClasses}
+        style={{ width, height, left: node.position.x, top: node.position.y }}
+        onMouseDown={(e) => onMouseDown(e, id)}
+        onContextMenu={(e) => onContextMenu(e, id)}
     >
-      {renderRunButton()}
-      {renderApprovalButtons()}
-      
-      {type !== NodeType.NOTE && PORTS.map(port => (
-          <div
-            key={port.id}
-            className={`absolute w-4 h-4 rounded-full bg-gray-950 border-2 ${borderClass} hover:scale-125 cursor-crosshair z-30 transition-all duration-200 flex items-center justify-center ${port.className}`}
-            onMouseDown={(e) => { e.stopPropagation(); onPortMouseDown(e, node.id, port.id); }}
-            onMouseUp={(e) => { e.stopPropagation(); onPortMouseUp(e, node.id, port.id); }}
-            title={`${port.id} Port`}
-          >
-              <div className={`w-2 h-2 rounded-full ${portColor}`}></div>
-          </div>
-      ))}
+        {renderRunButton()}
+        {renderApprovalButtons()}
+        {renderContent()}
 
-      {renderContent()}
-
-      {!isNote && showPopup && (
-          <div 
-            className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-80 bg-gray-900 border border-gray-600 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150 select-text cursor-default"
-            onMouseDown={(e) => e.stopPropagation()} 
-          >
-              <div className="flex items-center justify-between p-2 bg-gray-800 border-b border-gray-700">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                      {data.output ? "Output Result" : "Configuration"}
-                  </span>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setShowPopup(false); }}
-                    className="p-1 rounded hover:bg-gray-700 transition-colors text-gray-500 hover:text-white"
-                  >
-                      <X className="w-3.5 h-3.5" />
-                  </button>
-              </div>
-              <div className="p-3 max-h-60 overflow-y-auto font-mono text-xs text-gray-300 scrollbar-thin">
-                  {getWidgetContent()}
-              </div>
-              <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-gray-800 border-l border-t border-gray-600 rotate-45"></div>
-          </div>
-      )}
+        {/* Ports */}
+        {!isNote && PORTS.map((port) => (
+            <div 
+                key={port.id}
+                className={`absolute w-3 h-3 rounded-full border-2 border-gray-800 z-50 cursor-crosshair transition-transform hover:scale-125 ${portColor} ${port.className}`}
+                onMouseDown={(e) => onPortMouseDown(e, id, port.id)}
+                onMouseUp={(e) => onPortMouseUp(e, id, port.id)}
+            />
+        ))}
     </div>
   );
 };

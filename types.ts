@@ -7,12 +7,14 @@ export enum NodeType {
   AI_DEBATE = 'AI_DEBATE',       
   MULTI_CHECK = 'MULTI_CHECK',   
   ROUTER = 'ROUTER',             
-  ARCHITECT = 'ARCHITECT',       // New: Planning Agent
+  ARCHITECT = 'ARCHITECT',       
+  PROJECT_INDEX = 'PROJECT_INDEX', // New: Lists files in directory
+  TASK_ITERATOR = 'TASK_ITERATOR', // New: Loops through list
   AI_UNIT_TEST = 'AI_UNIT_TEST',
   SIMULATE_RUN = 'SIMULATE_RUN',
   PYTHON_EXEC = 'PYTHON_EXEC',
   SHELL_EXEC = 'SHELL_EXEC',
-  GIT_CONTROL = 'GIT_CONTROL',   // New: Version Control
+  GIT_CONTROL = 'GIT_CONTROL',   
   VS_CODE = 'VS_CODE',
   READ_FILE = 'READ_FILE',
   WRITE_FILE = 'WRITE_FILE',     
@@ -73,6 +75,11 @@ export interface NodeData {
   currentIteration?: number;
   feedback?: string; 
   lastFixedCode?: string; 
+  
+  // Task Iterator State
+  iteratorIndex?: number;
+  iteratorTotal?: number;
+  iteratorFinished?: boolean;
 }
 
 export interface Node {

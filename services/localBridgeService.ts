@@ -11,6 +11,7 @@ import { AISettings } from "../types";
  * POST /api/execute { command: string, cwd?: string } -> { stdout: string, stderr: string }
  * POST /api/read { path: string } -> { content: string }
  * POST /api/write { path: string, content: string } -> { success: boolean }
+ * POST /api/list { path: string } -> { files: string[] }
  */
 
 export const checkBridgeHealth = async (url: string): Promise<boolean> => {
@@ -87,5 +88,25 @@ export const bridgeWriteFile = async (path: string, content: string, settings: A
         return `Successfully wrote to ${path}`;
     } catch (e: any) {
         throw new Error(`Local Bridge Write Failed: ${e.message}`);
+    }
+};
+
+export const bridgeListFiles = async (path: string, settings: AISettings): Promise<string[]> => {
+    if (!settings.localBridgeEnabled) throw new Error("Local Bridge is disabled in settings.");
+
+    try {
+        const res = await fetch(`${settings.localBridgeUrl}/api/list`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: path || '.' })
+        });
+
+        if (!res.ok) throw new Error(`Bridge List Error: ${res.statusText}`);
+        const data = await res.json();
+        
+        if (data.error) throw new Error(data.error);
+        return Array.isArray(data.files) ? data.files : [];
+    } catch (e: any) {
+        throw new Error(`Local Bridge List Failed: ${e.message}`);
     }
 };

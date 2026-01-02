@@ -4,7 +4,7 @@ import { Node, Edge, NodeType, AISettings, AIProvider } from '../types';
 import { generateCode, checkCodeStructured, simulateExecution, generateUnitTests, refineCode, runDebate, runMultiProviderCheck } from './geminiService';
 import { runPythonCode } from './pyodideService';
 import { executeShellCommand } from './commandService';
-import { bridgeExecute, bridgeReadFile, bridgeWriteFile } from './localBridgeService';
+import { bridgeExecute, bridgeReadFile, bridgeWriteFile, bridgeListFiles } from './localBridgeService';
 import { parseOutputToFiles, formatFilesForPrompt } from './fileParsingService';
 
 // --- Types for Strategy Context ---
@@ -83,6 +83,18 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
         }
     },
 
+    [NodeType.PROJECT_INDEX]: async ({ node, aiSettings }) => {
+        const path = node.data.localPath || '.';
+        if (node.data.useLocalBridge) {
+            const files = await bridgeListFiles(path, aiSettings);
+            const limit = 50;
+            const displayed = files.slice(0, limit);
+            const more = files.length > limit ? `\n...and ${files.length - limit} more` : '';
+            return `FILE TREE (${path}):\n${displayed.join('\n')}${more}`;
+        }
+        return "Simulated File Tree:\n/src\n  app.tsx\n  types.ts\n/components\n  Header.tsx\npackage.json";
+    },
+
     [NodeType.WRITE_FILE]: async ({ node, parents, fileContext, aiSettings }) => {
         if (!node.data.localPath) throw new Error("No output path specified for Write File node.");
         
@@ -102,18 +114,27 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
         }
     },
 
-    [NodeType.GIT_CONTROL]: async ({ node, aiSettings }) => {
+    [NodeType.GIT_CONTROL]: async ({ node, parents, aiSettings }) => {
         const cmd = node.data.gitCommand || 'status';
         const msg = node.data.gitMessage || 'Auto-update via FlowGen';
         
-        // Construct the full git command
+        // Safety: If push/commit, require prior Approval node
+        if (['push', 'commit'].includes(cmd)) {
+            const hasApproval = parents.some(p => p.type === NodeType.APPROVAL && p.data.status === 'success');
+            // We can also allow if it's following a successful Unit Test, but Approval is safer for now.
+            if (!hasApproval) {
+                // Return string but DO NOT execute if bridge enabled, unless user adds a "Force" flag (future)
+                return `[Safety Block] Git '${cmd}' requires a successful Approval node as a parent. Operation skipped.`;
+            }
+        }
+
         let fullCmd = `git ${cmd}`;
         if (cmd === 'commit') {
             fullCmd = `git commit -m "${msg}"`;
         } else if (cmd === 'push') {
             fullCmd = `git push`;
         } else if (cmd === 'add') {
-            fullCmd = `git add .`; // Default to add all
+            fullCmd = `git add .`;
         }
 
         if (node.data.useLocalBridge) {
@@ -125,21 +146,74 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
 
     [NodeType.ARCHITECT]: async ({ node, textContext, vfsString, aiSettings }) => {
         const prompt = `
+            CONTEXT:
             ${vfsString}
             ${textContext}
             
             PROJECT ARCHITECT TASK:
-            ${node.data.prompt || "Analyze the requirements and create an implementation plan."}
+            ${node.data.prompt || "Analyze requirements and output an implementation plan."}
             
-            OUTPUT:
-            Provide a structured, step-by-step plan.
-            If code needs to be written, specify the file names and the high-level logic for each.
-            Return a clear Markdown plan.
+            IMPORTANT:
+            Output the plan strictly as a JSON object containing a "tasks" array.
+            Format:
+            \`\`\`json
+            {
+              "tasks": [
+                { "filename": "src/utils.ts", "instruction": "Create helper function..." },
+                { "filename": "src/App.tsx", "instruction": "Update component to use utils..." }
+              ]
+            }
+            \`\`\`
         `;
         const res = await runAiWithFallback(async (p) => {
-            return await generateCode(prompt, "You are a Senior Software Architect.", aiSettings, node.data.model, false, p);
+            return await generateCode(prompt, "You are a Senior Software Architect. Output valid JSON.", aiSettings, node.data.model, false, p);
         }, node.data.provider, aiSettings);
         return res.text;
+    },
+
+    [NodeType.TASK_ITERATOR]: async ({ node, parents, updateNodeData }) => {
+        // 1. Get Plan
+        const parentOutput = parents[0]?.data.output;
+        if (!parentOutput) throw new Error("No input plan found from Architect.");
+
+        let tasks: any[] = [];
+        try {
+            // Extract JSON
+            const jsonMatch = parentOutput.match(/```json\s*([\s\S]*?)\s*```/) || parentOutput.match(/\{[\s\S]*\}/);
+            const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : parentOutput;
+            const parsed = JSON.parse(jsonStr);
+            tasks = parsed.tasks || [];
+        } catch (e) {
+            throw new Error("Failed to parse Tasks JSON from parent.");
+        }
+
+        if (tasks.length === 0) return "No tasks found in plan.";
+
+        // 2. Determine Iteration
+        const currentIndex = node.data.iteratorIndex || 0;
+        
+        if (currentIndex >= tasks.length) {
+            // Reset for future runs
+            updateNodeData(node.id, { iteratorIndex: 0, iteratorFinished: true });
+            return "All tasks completed.";
+        }
+
+        const currentTask = tasks[currentIndex];
+        const nextIndex = currentIndex + 1;
+        const isFinished = nextIndex >= tasks.length;
+
+        // 3. Update State for this run
+        // We set the output to be the instruction for the *Next* node (Generator)
+        // We also flag that we are NOT done if there are more tasks.
+        updateNodeData(node.id, { 
+            iteratorIndex: nextIndex,
+            iteratorTotal: tasks.length,
+            iteratorFinished: isFinished,
+            // If not finished, we want the engine to re-visit us? 
+            // The engine doesn't support auto-revisit yet, so we rely on the App layer to check "iteratorFinished".
+        });
+
+        return `TASK (${currentIndex + 1}/${tasks.length}):\nFile: ${currentTask.filename}\nInstruction: ${currentTask.instruction}`;
     },
 
     [NodeType.GEMINI_GENERATE]: async ({ node, textContext, vfsString, aiSettings }) => {
@@ -160,9 +234,6 @@ If you cannot output JSON, use standard markdown code blocks with filenames in h
                 p 
             );
         }, node.data.provider, aiSettings);
-        
-        // We handle sources in the main executor
-        if(genResult.groundingSources) { /* Sources handled outside */ }
         
         return genResult.text;
     },
@@ -349,12 +420,12 @@ export const executeNode = async (
   }
 };
 
-// --- LOOP NODE LOGIC (Separated for clarity) ---
+// --- LOOP NODE LOGIC ---
 async function executeLoopNode(node: Node, parents: Node[], aiSettings: AISettings, updateNodeData: (id: string, data: Partial<Node['data']>) => void) {
     const maxIter = node.data.maxIterations || 3;
     const currentIter = node.data.currentIteration || 0;
 
-    const codeParent = parents.find(p => [NodeType.GEMINI_GENERATE, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TRIGGER, NodeType.READ_FILE, NodeType.AI_DEBATE].includes(p.type));
+    const codeParent = parents.find(p => [NodeType.GEMINI_GENERATE, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TRIGGER, NodeType.READ_FILE, NodeType.AI_DEBATE, NodeType.TASK_ITERATOR].includes(p.type));
     const issueParent = parents.find(p => [NodeType.GEMINI_CHECK, NodeType.AI_UNIT_TEST, NodeType.APPROVAL, NodeType.NOTE, NodeType.MULTI_CHECK, NodeType.SHELL_EXEC].includes(p.type) && p.id !== codeParent?.id);
 
     if (!codeParent) throw new Error("Loop Node requires a content source.");
