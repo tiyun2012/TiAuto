@@ -48,7 +48,7 @@ export default function App() {
       openaiModel: 'gpt-4o',
 
       localBridgeEnabled: false,
-      localBridgeUrl: 'http://localhost:3000'
+      localBridgeUrl: 'http://localhost:3001'
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -794,7 +794,7 @@ export default function App() {
                                     value={aiSettings.localBridgeUrl} 
                                     onChange={(e) => setAiSettings(s => ({...s, localBridgeUrl: e.target.value}))} 
                                     className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm" 
-                                    placeholder="http://localhost:3000" 
+                                    placeholder="http://localhost:3001" 
                                 />
                             </div>
                         </div>
