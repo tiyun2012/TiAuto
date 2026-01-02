@@ -1,9 +1,10 @@
 
 
 import { Node, Edge, NodeType, AISettings, AIProvider } from '../types';
-import { generateCode, checkCodeStructured, simulateExecution, generateUnitTests } from './geminiService';
+import { generateCode, checkCodeStructured, simulateExecution, generateUnitTests, refineCode, runDebate, runMultiProviderCheck } from './geminiService';
 import { runPythonCode } from './pyodideService';
 import { executeShellCommand } from './commandService';
+import { bridgeExecute, bridgeReadFile, bridgeWriteFile } from './localBridgeService';
 import { parseOutputToFiles, formatFilesForPrompt } from './fileParsingService';
 
 const getParentNodes = (nodeId: string, nodes: Node[], edges: Edge[]): Node[] => {
@@ -66,11 +67,9 @@ export const executeNode = async (
   // APPROVAL NODE LOGIC
   if (node.type === NodeType.APPROVAL) {
       if (node.data.status === 'success') {
-          // Already approved, pass through
-          return; 
+          return; // Already approved
       }
       updateNodeData(node.id, { status: 'waiting' });
-      // Throwing string to indicate pause, not failure
       throw new Error("WAIT_FOR_APPROVAL");
   }
 
@@ -98,9 +97,51 @@ export const executeNode = async (
         await new Promise(r => setTimeout(r, 500));
         break;
 
+      case NodeType.READ_FILE:
+        if (node.data.useLocalBridge && node.data.localPath) {
+            // Read from Local Bridge
+            result = await bridgeReadFile(node.data.localPath, aiSettings);
+            extractedFiles = { [node.data.localPath]: result };
+        } else {
+            // Read from Uploaded Data
+            if (!node.data.code) throw new Error("No file uploaded or local path specified.");
+            result = node.data.code;
+            if (result.includes('###') || result.includes('```')) {
+                extractedFiles = parseOutputToFiles(result);
+            } else {
+                extractedFiles = { [node.data.label || 'uploaded_file']: result };
+            }
+        }
+        break;
+
+      case NodeType.WRITE_FILE:
+        if (!node.data.localPath) throw new Error("No output path specified for Write File node.");
+        
+        let contentToWrite = node.data.code;
+        // If no direct code override, use parent output
+        if (!contentToWrite && parents.length > 0) {
+            // Try to find matching file in context if filename matches
+            const targetFilename = node.data.localPath.split('/').pop() || "";
+            if (fileContext[targetFilename]) {
+                contentToWrite = fileContext[targetFilename];
+            } else {
+                // Fallback to raw text output
+                contentToWrite = parents[0].data.output || parents[0].data.code || "";
+            }
+        }
+        
+        if (!contentToWrite) throw new Error("No content to write.");
+
+        if (node.data.useLocalBridge) {
+            result = await bridgeWriteFile(node.data.localPath, contentToWrite, aiSettings);
+        } else {
+            result = `[Simulation] Would write to ${node.data.localPath}:\n${contentToWrite.slice(0, 100)}...`;
+        }
+        break;
+
       case NodeType.GEMINI_GENERATE:
-        const genPrompt = `${vfsString}\n${textContext}\n\nTask: ${node.data.prompt || 'Generate code based on previous context.'}`;
-        // Enhanced instruction for reliable multi-file parsing
+        let genPrompt = `${vfsString}\n${textContext}\n\nTask: ${node.data.prompt || 'Generate code based on previous context.'}`;
+        
         const fileInstruction = `
 IMPORTANT: When generating multiple files, you MUST separate them exactly like this:
 
@@ -144,6 +185,158 @@ Do not use any other format for file separation.
              return await checkCodeStructured(fullContext, checkCriteria, aiSettings, modelOverride, p);
         }, providerOverride, aiSettings);
         break;
+
+      case NodeType.AI_DEBATE:
+        const topic = node.data.prompt || "Refine the provided code/plan.";
+        const personaA = node.data.personaA || "Creative Architect";
+        const personaB = node.data.personaB || "Senior Security Engineer";
+        const rounds = node.data.debateRounds || 2;
+        
+        const debateContext = `${vfsString}\n\n${textContext}`;
+
+        result = await runAiWithFallback(async (p) => {
+             return await runDebate(debateContext, topic, personaA, personaB, rounds, aiSettings, modelOverride, p);
+        }, providerOverride, aiSettings);
+        
+        extractedFiles = parseOutputToFiles(result);
+        break;
+
+      case NodeType.MULTI_CHECK:
+         const providers = node.data.enabledProviders || ['gemini'];
+         if (providers.length === 0) throw new Error("No providers selected for Multi-Check.");
+         const multiCheckContext = `${vfsString}\n\n${textContext}`;
+         const multiCheckPrompt = node.data.prompt || "Analyze this content.";
+
+         result = await runMultiProviderCheck(multiCheckPrompt, multiCheckContext, providers, aiSettings);
+         break;
+
+      case NodeType.ROUTER:
+         // Logic Gate: Uses AI to decide if condition is true
+         const condition = node.data.prompt || "Is the code valid?";
+         const routerContext = `${vfsString}\n\n${textContext}`;
+         const routerPrompt = `
+            CONTEXT:
+            ${routerContext}
+            
+            QUESTION:
+            ${condition}
+            
+            TASK:
+            Answer with exactly "TRUE" or "FALSE".
+         `;
+         const routerRes = await runAiWithFallback(async(p) => {
+             return await generateCode(routerPrompt, "Output ONLY 'TRUE' or 'FALSE'.", aiSettings, modelOverride, false, p);
+         }, providerOverride, aiSettings);
+         
+         const decision = routerRes.text.trim().toUpperCase().includes("TRUE");
+         result = decision ? "TRUE" : "FALSE";
+         break;
+
+      case NodeType.LOOP:
+        const maxIter = node.data.maxIterations || 3;
+        const currentIter = node.data.currentIteration || 0;
+
+        // A. Identify Inputs via Heuristics
+        const codeParent = parents.find(p => [NodeType.GEMINI_GENERATE, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TRIGGER, NodeType.READ_FILE, NodeType.AI_DEBATE].includes(p.type));
+        const issueParent = parents.find(p => [NodeType.GEMINI_CHECK, NodeType.AI_UNIT_TEST, NodeType.APPROVAL, NodeType.NOTE, NodeType.MULTI_CHECK, NodeType.SHELL_EXEC].includes(p.type) && p.id !== codeParent?.id);
+
+        if (!codeParent) {
+            throw new Error("Loop Node requires a content source input (e.g., Generate Node or Read File).");
+        }
+
+        const currentCode = codeParent.data.output || codeParent.data.code || "";
+        
+        if (!issueParent) {
+            result = "No issue source connected. Passing through content.";
+            extractedFiles = codeParent.data.files || {};
+            break;
+        }
+
+        const checkOutput = issueParent.data.output || "";
+        const issueType = issueParent.type;
+
+        // B. Evaluate Issues
+        let hasError = false;
+        
+        if (issueType === NodeType.APPROVAL) {
+            if (issueParent.data.status === 'error') hasError = true;
+        } else if (checkOutput.includes('[') && checkOutput.includes(']')) {
+             try {
+                 const issues = JSON.parse(checkOutput);
+                 const seriousIssues = issues.filter((i: any) => i.severity === 'High' || i.severity === 'Medium');
+                 if (seriousIssues.length > 0) hasError = true;
+             } catch (e) {
+                 if (checkOutput.toLowerCase().includes("error") || checkOutput.toLowerCase().includes("fail")) hasError = true;
+             }
+        } else {
+             const lower = checkOutput.toLowerCase();
+             if (lower.includes("fail") || lower.includes("error") || lower.includes("bug") || lower.includes("issue")) hasError = true;
+        }
+
+        // C. Execute Loop Logic
+        if (hasError && currentIter < maxIter) {
+             console.log(`[Loop] Issues found from ${issueParent.data.label}. Iteration ${currentIter + 1}/${maxIter}`);
+             
+             const fixPrompt = `
+                You are an automated code fixer in a loop.
+                
+                1. CURRENT CODE (to be fixed):
+                ${currentCode}
+
+                2. REPORTED ISSUES / FEEDBACK:
+                ${checkOutput}
+
+                3. USER INSTRUCTIONS:
+                ${node.data.prompt || "Fix the code based on the issues found. Return the fully corrected code."}
+                
+                Task: Return ONLY the fixed code. Maintain file structure.
+             `;
+
+             const fixedResult = await runAiWithFallback(async (p) => {
+                return await refineCode(
+                    fixPrompt, 
+                    "You are an automated code fixer. Fix the reported issues.", 
+                    aiSettings, 
+                    modelOverride, 
+                    providerOverride
+                );
+             }, providerOverride, aiSettings);
+
+             const fixedCode = fixedResult;
+             const newFiles = parseOutputToFiles(fixedCode);
+
+             updateNodeData(codeParent.id, { 
+                 output: fixedCode,
+                 code: fixedCode, 
+                 files: Object.keys(newFiles).length > 0 ? newFiles : undefined 
+             });
+
+             updateNodeData(node.id, { 
+                 currentIteration: currentIter + 1,
+                 lastFixedCode: fixedCode,
+                 files: Object.keys(newFiles).length > 0 ? newFiles : undefined,
+                 status: 'idle' 
+             });
+
+             updateNodeData(issueParent.id, { 
+                 status: 'idle', 
+                 output: undefined 
+             });
+             
+             throw new Error("LOOP_TRIGGERED");
+
+        } else {
+             if (hasError) {
+                 result = `Max retries (${maxIter}) reached. Proceeding with last available version despite issues.`;
+             } else {
+                 result = "Check passed (No issues found). Workflow continuing.";
+             }
+             
+             const finalCode = codeParent.data.output || "";
+             extractedFiles = codeParent.data.files || parseOutputToFiles(finalCode);
+             updateNodeData(node.id, { currentIteration: 0 });
+        }
+        break;
       
       case NodeType.AI_UNIT_TEST:
         if (!vfsString.trim() && !textContext.trim()) {
@@ -172,7 +365,12 @@ Do not use any other format for file separation.
       case NodeType.SHELL_EXEC:
          const command = node.data.prompt || "echo 'No command'";
          const shellContext = `${vfsString}\n\n${textContext}`;
-         result = await executeShellCommand(command, aiSettings, shellContext, node.data.useAiSimulation ?? true);
+         
+         if (node.data.useLocalBridge) {
+             result = await bridgeExecute(command, aiSettings);
+         } else {
+             result = await executeShellCommand(command, aiSettings, shellContext, node.data.useAiSimulation ?? true);
+         }
          break;
 
       case NodeType.PYTHON_EXEC:
@@ -252,6 +450,10 @@ Do not use any other format for file separation.
       if (error.message === "WAIT_FOR_APPROVAL") {
           console.log("Node paused for approval.");
           return;
+      }
+      if (error.message === "LOOP_TRIGGERED") {
+          console.log("Loop triggered - restarting branch.");
+          throw error; // Propagate to App logic to handle queue reset
       }
       console.error(`Error executing node ${node.id}:`, error);
       updateNodeData(node.id, { status: 'error', errorMessage: error.message });

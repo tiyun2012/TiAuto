@@ -4,7 +4,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Node, Edge, NodeType, NodeShape } from '../types';
 import NodeComponent from './NodeComponent';
 import { getPortPosition } from '../constants';
-import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical, FileDiff, ThumbsUp } from 'lucide-react';
+import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical, FileDiff, ThumbsUp, Repeat, FolderOpen, Users, Layers, GitFork, Save } from 'lucide-react';
 
 interface CanvasProps {
   nodes: Node[];
@@ -22,8 +22,14 @@ interface CanvasProps {
 // Node definitions for the picker
 const NODE_OPTIONS = [
   { type: NodeType.TRIGGER, label: 'Trigger', icon: Play, desc: 'Start workflow', color: 'text-green-400' },
+  { type: NodeType.READ_FILE, label: 'Read File', icon: FolderOpen, desc: 'Load local content', color: 'text-blue-300' },
+  { type: NodeType.WRITE_FILE, label: 'Write File', icon: Save, desc: 'Save to disk (Bridge)', color: 'text-red-300' },
   { type: NodeType.GEMINI_GENERATE, label: 'AI Generator', icon: FileCode, desc: 'Write code', color: 'text-purple-400' },
+  { type: NodeType.AI_DEBATE, label: 'AI Debate', icon: Users, desc: 'Multi-persona discussion', color: 'text-pink-400' },
   { type: NodeType.GEMINI_CHECK, label: 'AI Security', icon: ShieldCheck, desc: 'Audit code', color: 'text-orange-400' },
+  { type: NodeType.MULTI_CHECK, label: 'Group Check', icon: Layers, desc: 'Multiple AIs run in parallel', color: 'text-indigo-300' },
+  { type: NodeType.LOOP, label: 'Loop Controller', icon: Repeat, desc: 'Smart Fixer (Takes 2 Inputs)', color: 'text-violet-400' },
+  { type: NodeType.ROUTER, label: 'Router', icon: GitFork, desc: 'Conditional Logic (True/False)', color: 'text-yellow-200' },
   { type: NodeType.AI_UNIT_TEST, label: 'Unit Tests', icon: FlaskConical, desc: 'Generate Tests', color: 'text-cyan-400' },
   { type: NodeType.APPROVAL, label: 'Approval', icon: ThumbsUp, desc: 'Wait for Human', color: 'text-rose-400' },
   { type: NodeType.SHELL_EXEC, label: 'Shell Command', icon: SquareTerminal, desc: 'CLI Execution', color: 'text-gray-200' },

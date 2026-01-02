@@ -4,15 +4,21 @@ export enum NodeType {
   TRIGGER = 'TRIGGER',
   GEMINI_GENERATE = 'GEMINI_GENERATE',
   GEMINI_CHECK = 'GEMINI_CHECK',
+  AI_DEBATE = 'AI_DEBATE',       // New: Multi-persona discussion
+  MULTI_CHECK = 'MULTI_CHECK',   // New: Run against multiple providers
+  ROUTER = 'ROUTER',             // New: Logic Branching
   AI_UNIT_TEST = 'AI_UNIT_TEST',
   SIMULATE_RUN = 'SIMULATE_RUN',
   PYTHON_EXEC = 'PYTHON_EXEC',
   SHELL_EXEC = 'SHELL_EXEC',
   VS_CODE = 'VS_CODE',
+  READ_FILE = 'READ_FILE',
+  WRITE_FILE = 'WRITE_FILE',     // New: Save to disk via Bridge
   TODO_LIST = 'TODO_LIST',
   NOTE = 'NOTE',
   DIFF = 'DIFF',
-  APPROVAL = 'APPROVAL'
+  APPROVAL = 'APPROVAL',
+  LOOP = 'LOOP'
 }
 
 export type NodeShape = 'rectangle' | 'square' | 'circle';
@@ -29,9 +35,21 @@ export interface NodeData {
   systemInstruction?: string;
   
   // AI Config Per Node
-  provider?: AIProvider; // New: Override global provider
-  model?: string;        // Model specific to provider
+  provider?: AIProvider; 
+  model?: string;        
   
+  // Debate Config
+  personaA?: string;
+  personaB?: string;
+  debateRounds?: number;
+
+  // Multi-Check Config
+  enabledProviders?: AIProvider[];
+
+  // Local Bridge Config
+  useLocalBridge?: boolean;
+  localPath?: string;
+
   useAiSimulation?: boolean;
   output?: string;
   files?: Record<string, string>;
@@ -43,6 +61,12 @@ export interface NodeData {
 
   useSearch?: boolean;
   groundingSources?: Array<{ title: string; uri: string }>;
+
+  // Loop / Iteration Logic
+  maxIterations?: number;
+  currentIteration?: number;
+  feedback?: string; 
+  lastFixedCode?: string; 
 }
 
 export interface Node {
@@ -79,13 +103,17 @@ export interface AISettings {
 
   // Qwen (via OpenAI Compatible Endpoint)
   qwenKey: string;
-  qwenUrl: string; // e.g. https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+  qwenUrl: string; 
   qwenModel: string;
 
   // Generic OpenAI
   openaiKey: string;
   openaiUrl: string;
   openaiModel: string;
+
+  // Local Bridge Settings
+  localBridgeEnabled: boolean;
+  localBridgeUrl: string;
 }
 
 export const INITIAL_NODES: Node[] = [

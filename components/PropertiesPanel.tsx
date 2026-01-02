@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Node, NodeType, NodeShape, AISettings, AIProvider } from '../types';
-import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2, AlertTriangle, AlertCircle, Info, CheckCircle2, Bot, Brain, Globe, ExternalLink, Wrench, Server, Zap, Lightbulb, BookOpen, Download, FileCode, FileJson, FileType, Code2 } from 'lucide-react';
+import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2, AlertTriangle, AlertCircle, Info, CheckCircle2, Bot, Brain, Globe, ExternalLink, Wrench, Server, Zap, Lightbulb, BookOpen, Download, FileCode, FileJson, FileType, Code2, Repeat, FolderOpen, Users, Layers, GitFork, Network, Save } from 'lucide-react';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import { GEMINI_MODELS, DEEPSEEK_MODELS, QWEN_MODELS, OPENAI_MODELS } from '../constants';
 
@@ -44,6 +44,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
         if (fileName.endsWith('.css')) return 'css';
         if (fileName.endsWith('.sh')) return 'shell';
         if (fileName.endsWith('.md')) return 'markdown';
+        if (fileName.endsWith('.cpp') || fileName.endsWith('.c') || fileName.endsWith('.h')) return 'cpp';
+        if (fileName.endsWith('.cs')) return 'csharp';
     }
     if (node.type === NodeType.GEMINI_GENERATE && isOutput) return 'python';
     if (node.type === NodeType.GEMINI_CHECK && !isOutput) return 'text';
@@ -82,9 +84,25 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
       URL.revokeObjectURL(url);
   };
 
+  // Handle local file selection
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const content = ev.target?.result as string;
+        onUpdateNode(node.id, { 
+            code: content, 
+            label: file.name,
+            output: content // Pre-fill output so it's visible immediately
+        });
+    };
+    reader.readAsText(file);
+  };
+
   const currentShape = node.data.shape || 'rectangle';
   const hasMultipleFiles = node.data.files && Object.keys(node.data.files).length > 0;
-  const isGenerative = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.AI_UNIT_TEST, NodeType.SIMULATE_RUN].includes(node.type);
+  const isGenerative = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.AI_UNIT_TEST, NodeType.SIMULATE_RUN, NodeType.LOOP, NodeType.AI_DEBATE, NodeType.MULTI_CHECK].includes(node.type);
 
   // Determine active provider for this node (Override > Global)
   const activeProvider = node.data.provider || aiSettings.provider;
@@ -107,6 +125,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
           case NodeType.PYTHON_EXEC: return "Executes Python code in the browser (via Pyodide). Use this to actually run data analysis or logic.";
           case NodeType.SHELL_EXEC: return "Simulates shell commands. In a desktop version, this would run actual system commands.";
           case NodeType.DIFF: return "Compares the text output of two parent nodes to show what changed.";
+          case NodeType.LOOP: return "Requires 2 Inputs: Code + Check Result. It uses AI to fix the code based on the result and retries.";
+          case NodeType.READ_FILE: return "Reads the content of a local file. Use this to feed existing code into a workflow.";
+          case NodeType.WRITE_FILE: return "Writes the input content to a file on your local disk (via Local Bridge).";
+          case NodeType.AI_DEBATE: return "Simulates a conversation between two AI Personas to refine ideas before output.";
+          case NodeType.MULTI_CHECK: return "Runs the check against multiple AI providers simultaneously for robust consensus.";
+          case NodeType.ROUTER: return "Evaluates a condition using AI and returns TRUE or FALSE.";
           default: return "Configure the settings above to control this node.";
       }
   };
@@ -204,6 +228,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
             node.type === NodeType.SHELL_EXEC ? 'bg-gray-500' :
             node.type === NodeType.VS_CODE ? 'bg-blue-500' : 
             node.type === NodeType.DIFF ? 'bg-indigo-500' :
+            node.type === NodeType.LOOP ? 'bg-violet-500' :
+            node.type === NodeType.READ_FILE ? 'bg-blue-300' :
+            node.type === NodeType.WRITE_FILE ? 'bg-red-300' :
+            node.type === NodeType.AI_DEBATE ? 'bg-pink-400' :
+            node.type === NodeType.MULTI_CHECK ? 'bg-indigo-300' :
+            node.type === NodeType.ROUTER ? 'bg-yellow-200' :
             node.type === NodeType.TODO_LIST ? 'bg-teal-500' : 'bg-yellow-500'
           }`}></span>
           {node.type.replace('_', ' ')}
@@ -250,46 +280,50 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
         {/* AI Configuration (Rich Feature: Provider Selection) */}
         {isGenerative && (
             <div className="space-y-4 p-4 bg-gray-900/50 border border-gray-800 rounded-lg">
-                 {/* Provider Select */}
-                 <div className="space-y-2">
-                     <label className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
-                        <Server className="w-3.5 h-3.5" />
-                        AI Provider
-                     </label>
-                     <select 
-                        value={node.data.provider || ''}
-                        onChange={(e) => {
-                            const val = e.target.value as AIProvider | '';
-                            // When provider changes, clear specific model override to avoid mismatch
-                            onUpdateNode(node.id, { provider: val || undefined, model: undefined });
-                        }}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                     >
-                         <option value="">Use Global Default ({aiSettings.provider})</option>
-                         <option value="gemini">Google Gemini</option>
-                         <option value="deepseek">DeepSeek</option>
-                         <option value="qwen">Qwen (Alibaba)</option>
-                         <option value="openai">OpenAI / Compatible</option>
-                     </select>
-                 </div>
+                 {/* Provider Select - Hidden for Multi-Check as it selects many */}
+                 {node.type !== NodeType.MULTI_CHECK && (
+                     <div className="space-y-2">
+                         <label className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                            <Server className="w-3.5 h-3.5" />
+                            AI Provider
+                         </label>
+                         <select 
+                            value={node.data.provider || ''}
+                            onChange={(e) => {
+                                const val = e.target.value as AIProvider | '';
+                                // When provider changes, clear specific model override to avoid mismatch
+                                onUpdateNode(node.id, { provider: val || undefined, model: undefined });
+                            }}
+                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                         >
+                             <option value="">Use Global Default ({aiSettings.provider})</option>
+                             <option value="gemini">Google Gemini</option>
+                             <option value="deepseek">DeepSeek</option>
+                             <option value="qwen">Qwen (Alibaba)</option>
+                             <option value="openai">OpenAI / Compatible</option>
+                         </select>
+                     </div>
+                 )}
 
                  {/* Model Select */}
-                 <div className="space-y-2">
-                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
-                        <Zap className="w-3.5 h-3.5" />
-                        Model
-                     </label>
-                     <select 
-                        value={node.data.model || ''}
-                        onChange={(e) => onUpdateNode(node.id, { model: e.target.value })}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                     >
-                         <option value="">Default Provider Model</option>
-                         {availableModels.map(m => (
-                             <option key={m.value} value={m.value}>{m.label}</option>
-                         ))}
-                     </select>
-                 </div>
+                 {node.type !== NodeType.MULTI_CHECK && (
+                     <div className="space-y-2">
+                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                            <Zap className="w-3.5 h-3.5" />
+                            Model
+                         </label>
+                         <select 
+                            value={node.data.model || ''}
+                            onChange={(e) => onUpdateNode(node.id, { model: e.target.value })}
+                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                         >
+                             <option value="">Default Provider Model</option>
+                             {availableModels.map(m => (
+                                 <option key={m.value} value={m.value}>{m.label}</option>
+                             ))}
+                         </select>
+                     </div>
+                 )}
 
                  {/* Gemini Grounding */}
                  {node.type === NodeType.GEMINI_GENERATE && activeProvider === 'gemini' && (
@@ -306,6 +340,194 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
                         />
                      </div>
                  )}
+            </div>
+        )}
+
+        {/* AI DEBATE CONFIG */}
+        {node.type === NodeType.AI_DEBATE && (
+            <div className="space-y-4 p-4 bg-gray-900/50 border border-gray-800 rounded-lg">
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-pink-400 uppercase tracking-wider flex items-center gap-2">
+                        <Users className="w-3.5 h-3.5" />
+                        Personas
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                        <input 
+                           type="text" 
+                           placeholder="Persona A (e.g. Architect)"
+                           value={node.data.personaA || ''}
+                           onChange={(e) => onUpdateNode(node.id, { personaA: e.target.value })}
+                           className="bg-gray-800 border border-gray-700 rounded p-2 text-xs"
+                        />
+                        <input 
+                           type="text" 
+                           placeholder="Persona B (e.g. Security)"
+                           value={node.data.personaB || ''}
+                           onChange={(e) => onUpdateNode(node.id, { personaB: e.target.value })}
+                           className="bg-gray-800 border border-gray-700 rounded p-2 text-xs"
+                        />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-pink-400 uppercase tracking-wider">Rounds</label>
+                    <input 
+                        type="number" 
+                        min="1" 
+                        max="5"
+                        value={node.data.debateRounds || 2}
+                        onChange={(e) => onUpdateNode(node.id, { debateRounds: parseInt(e.target.value) })}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm"
+                    />
+                </div>
+            </div>
+        )}
+
+        {/* MULTI CHECK CONFIG */}
+        {node.type === NodeType.MULTI_CHECK && (
+            <div className="space-y-4 p-4 bg-gray-900/50 border border-gray-800 rounded-lg">
+                <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5" />
+                    Active Providers
+                </label>
+                <div className="space-y-2">
+                    {['gemini', 'deepseek', 'qwen', 'openai'].map((p) => (
+                        <label key={p} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer hover:text-white">
+                            <input 
+                                type="checkbox"
+                                checked={node.data.enabledProviders?.includes(p as AIProvider) || false}
+                                onChange={(e) => {
+                                    const current = node.data.enabledProviders || [];
+                                    const next = e.target.checked 
+                                        ? [...current, p as AIProvider]
+                                        : current.filter(cp => cp !== p);
+                                    onUpdateNode(node.id, { enabledProviders: next });
+                                }}
+                                className="rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500/20"
+                            />
+                            <span className="capitalize">{p}</span>
+                        </label>
+                    ))}
+                </div>
+                <p className="text-[10px] text-gray-500">Selected providers will run in parallel. Ensure keys are set in settings.</p>
+            </div>
+        )}
+
+        {/* LOOP NODE CONFIG */}
+        {node.type === NodeType.LOOP && (
+            <div className="space-y-4 p-4 bg-gray-900/50 border border-gray-800 rounded-lg">
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-violet-400 uppercase tracking-wider flex items-center gap-2">
+                        <Repeat className="w-3.5 h-3.5" />
+                        Max Retries
+                    </label>
+                    <div className="flex items-center gap-3">
+                         <input 
+                            type="range" 
+                            min="1" 
+                            max="10" 
+                            value={node.data.maxIterations || 3}
+                            onChange={(e) => onUpdateNode(node.id, { maxIterations: parseInt(e.target.value) })}
+                            className="flex-1 accent-violet-500 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <span className="text-sm font-mono w-6 text-center">{node.data.maxIterations || 3}</span>
+                    </div>
+                    <div className="mt-2 text-[10px] text-gray-400 bg-gray-800 p-2 rounded border border-gray-700">
+                        <span className="font-bold text-violet-400">Logic:</span> If input check fails, this node will 
+                        use AI to fix the code using the issue report, then update the upstream code and retry.
+                        <br/>
+                        <span className="text-gray-500 mt-1 block">Requires: 1 Code Input + 1 Check Input</span>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* READ_FILE Config */}
+        {node.type === NodeType.READ_FILE && (
+            <div className="space-y-4">
+                {aiSettings.localBridgeEnabled && (
+                    <div className="space-y-2 pb-2 border-b border-gray-700">
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="checkbox" 
+                                id="localRead"
+                                checked={node.data.useLocalBridge || false}
+                                onChange={(e) => onUpdateNode(node.id, { useLocalBridge: e.target.checked })}
+                            />
+                            <label htmlFor="localRead" className="text-xs text-indigo-300 font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer">
+                                <Network className="w-3 h-3" /> Read from Local Path
+                            </label>
+                        </div>
+                        {node.data.useLocalBridge && (
+                            <input 
+                                type="text"
+                                placeholder="/path/to/file.txt"
+                                value={node.data.localPath || ''}
+                                onChange={(e) => onUpdateNode(node.id, { localPath: e.target.value })}
+                                className="w-full bg-gray-800 border border-indigo-900/50 rounded p-2 text-sm font-mono focus:ring-1 focus:ring-indigo-500"
+                            />
+                        )}
+                    </div>
+                )}
+
+                {!node.data.useLocalBridge && (
+                    <div className="p-4 bg-gray-800 border-2 border-dashed border-gray-700 rounded-lg text-center hover:border-blue-500 transition-colors">
+                        <label className="cursor-pointer block">
+                            <FolderOpen className="w-8 h-8 mx-auto mb-2 text-blue-400" />
+                            <span className="text-sm font-medium text-gray-300">
+                                {node.data.label !== 'Read File' ? node.data.label : 'Select Local File (Browser Upload)'}
+                            </span>
+                            <input type="file" className="hidden" onChange={handleFileUpload} />
+                        </label>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* WRITE_FILE Config */}
+        {node.type === NodeType.WRITE_FILE && (
+            <div className="space-y-4">
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-red-300 uppercase tracking-wider flex items-center gap-2">
+                        <Save className="w-3.5 h-3.5" /> Output Path
+                    </label>
+                    <input 
+                        type="text"
+                        placeholder="/path/to/output_file.ext"
+                        value={node.data.localPath || ''}
+                        onChange={(e) => onUpdateNode(node.id, { localPath: e.target.value })}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm font-mono"
+                    />
+                </div>
+                
+                {aiSettings.localBridgeEnabled ? (
+                    <div className="flex items-center gap-2 p-2 bg-indigo-900/20 rounded border border-indigo-900/50">
+                        <input 
+                            type="checkbox" 
+                            id="localWrite"
+                            checked={node.data.useLocalBridge || true} // Default true if bridge enabled
+                            onChange={(e) => onUpdateNode(node.id, { useLocalBridge: e.target.checked })}
+                        />
+                        <label htmlFor="localWrite" className="text-xs text-indigo-300 cursor-pointer">Write to real disk via Bridge</label>
+                    </div>
+                ) : (
+                    <div className="p-2 bg-yellow-900/20 text-yellow-500 text-xs rounded border border-yellow-900/50">
+                        Local Bridge disabled. File write will be simulated.
+                    </div>
+                )}
+
+                <div className="mt-4 space-y-2 flex flex-col h-40">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Content Override (Optional)</label>
+                    <div className="flex-1 border border-gray-700 rounded overflow-hidden">
+                        <Editor
+                            height="100%"
+                            defaultLanguage="text"
+                            value={node.data.code || ''}
+                            onChange={(value) => onUpdateNode(node.id, { code: value })}
+                            theme="vs-dark"
+                            options={{ minimap: { enabled: false }, fontSize: 13 }}
+                        />
+                    </div>
+                </div>
             </div>
         )}
 
@@ -339,14 +561,29 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
 
         {node.type === NodeType.SHELL_EXEC && (
             <div className="space-y-4">
+                {aiSettings.localBridgeEnabled && (
+                    <div className="flex items-center gap-2 p-2 bg-indigo-900/20 rounded border border-indigo-900/50 mb-2">
+                        <input 
+                            type="checkbox" 
+                            id="localShell" 
+                            checked={node.data.useLocalBridge || false}
+                            onChange={(e) => onUpdateNode(node.id, { useLocalBridge: e.target.checked })}
+                        />
+                        <label htmlFor="localShell" className="text-xs text-indigo-300 font-bold uppercase tracking-wider cursor-pointer flex items-center gap-2">
+                            <Network className="w-3 h-3" /> Run on Host (Real)
+                        </label>
+                    </div>
+                )}
+
                 <div className="flex items-center gap-2">
                     <input 
                         type="checkbox" 
                         id="aiSim" 
-                        checked={node.data.useAiSimulation ?? true}
+                        checked={!node.data.useLocalBridge && (node.data.useAiSimulation ?? true)}
+                        disabled={node.data.useLocalBridge}
                         onChange={(e) => onUpdateNode(node.id, { useAiSimulation: e.target.checked })}
                     />
-                    <label htmlFor="aiSim" className="text-xs text-gray-400 cursor-pointer">Simulate in Browser (AI)</label>
+                    <label htmlFor="aiSim" className={`text-xs ${node.data.useLocalBridge ? 'text-gray-600' : 'text-gray-400'} cursor-pointer`}>Simulate in Browser (AI)</label>
                 </div>
                 <div className="space-y-2 flex flex-col h-48">
                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Command</label>
@@ -418,7 +655,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
         {isGenerative && (
              <div className="space-y-2 flex flex-col h-64">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                   {node.type === NodeType.GEMINI_CHECK ? 'Check Criteria' : 'Prompt / Instructions'}
+                   {node.type === NodeType.GEMINI_CHECK ? 'Check Criteria' : 
+                    node.type === NodeType.LOOP ? 'Fix Instructions (Optional)' : 
+                    node.type === NodeType.AI_DEBATE ? 'Debate Topic' :
+                    node.type === NodeType.MULTI_CHECK ? 'Instruction for All Providers' :
+                    node.type === NodeType.ROUTER ? 'Condition (e.g. Is code correct?)' :
+                    'Prompt / Instructions'}
                 </label>
                 <div className="flex-1 border border-gray-700 rounded overflow-hidden">
                     <Editor
@@ -501,7 +743,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
             </div>
 
             {/* Refinement Input */}
-            {isGenerative && onRefineNode && (
+            {isGenerative && onRefineNode && node.type !== NodeType.ROUTER && (
                 <div className="bg-gray-800/50 p-2 rounded-lg border border-gray-700 flex gap-2">
                      <input 
                         type="text" 

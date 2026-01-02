@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { NodeType } from '../types';
-import { Play, Sparkles, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, SquareTerminal, FlaskConical, FileDiff, ThumbsUp } from 'lucide-react';
+import { Play, Sparkles, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, SquareTerminal, FlaskConical, FileDiff, ThumbsUp, Repeat, FolderOpen, Users, Layers, GitFork } from 'lucide-react';
 
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
@@ -42,6 +42,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
             type={NodeType.TRIGGER} 
         />
         <ToolButton 
+            icon={<FolderOpen />} 
+            label="Read File" 
+            tooltip="Load local file content."
+            color="text-blue-300" 
+            onClick={() => onAddNode(NodeType.READ_FILE)}
+            type={NodeType.READ_FILE} 
+        />
+        <ToolButton 
             icon={<Sparkles />} 
             label="Gen" 
             tooltip="Generates Code/Text (Creative)."
@@ -50,12 +58,44 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
             type={NodeType.GEMINI_GENERATE} 
         />
         <ToolButton 
+            icon={<Users />} 
+            label="Debate" 
+            tooltip="Multi-Persona Discussion."
+            color="text-pink-400" 
+            onClick={() => onAddNode(NodeType.AI_DEBATE)}
+            type={NodeType.AI_DEBATE} 
+        />
+        <ToolButton 
             icon={<ShieldCheck />} 
             label="Check" 
             tooltip="Audits Code for Bugs/Security."
             color="text-orange-400" 
             onClick={() => onAddNode(NodeType.GEMINI_CHECK)}
             type={NodeType.GEMINI_CHECK} 
+        />
+        <ToolButton 
+            icon={<Layers />} 
+            label="Group" 
+            tooltip="Run Check on Multiple AIs."
+            color="text-indigo-300" 
+            onClick={() => onAddNode(NodeType.MULTI_CHECK)}
+            type={NodeType.MULTI_CHECK} 
+        />
+        <ToolButton 
+            icon={<Repeat />} 
+            label="Loop" 
+            tooltip="Retry logic if checks fail."
+            color="text-violet-400" 
+            onClick={() => onAddNode(NodeType.LOOP)}
+            type={NodeType.LOOP} 
+        />
+        <ToolButton 
+            icon={<GitFork />} 
+            label="Router" 
+            tooltip="Logic Gate (True/False)."
+            color="text-yellow-200" 
+            onClick={() => onAddNode(NodeType.ROUTER)}
+            type={NodeType.ROUTER} 
         />
         <ToolButton 
             icon={<ThumbsUp />} 
@@ -140,8 +180,8 @@ const ToolButton = ({ icon, label, tooltip, onClick, color, type }: { icon: any,
         e.dataTransfer.effectAllowed = 'move';
     };
 
-    const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST].includes(type);
-    const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL].includes(type);
+    const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST, NodeType.AI_DEBATE, NodeType.MULTI_CHECK].includes(type);
+    const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL, NodeType.LOOP, NodeType.READ_FILE, NodeType.ROUTER].includes(type);
 
     return (
         <div 

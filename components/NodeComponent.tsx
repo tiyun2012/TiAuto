@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff, Sparkles, Bot, Zap, Cloud, Server, ThumbsUp, ThumbsDown, CircleDashed, Files } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff, Sparkles, Bot, Zap, Cloud, Server, ThumbsUp, ThumbsDown, CircleDashed, Files, Repeat, FolderOpen, Users, Layers, GitFork, Save } from 'lucide-react';
 import { NODE_DIMENSIONS } from '../constants';
 
 interface NodeComponentProps {
@@ -44,8 +44,8 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   let portColor = "bg-blue-500"; 
 
   // Categorize
-  const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST].includes(type);
-  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL].includes(type);
+  const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST, NodeType.AI_DEBATE, NodeType.MULTI_CHECK].includes(type);
+  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL, NodeType.LOOP, NodeType.READ_FILE, NodeType.ROUTER, NodeType.WRITE_FILE].includes(type);
   const isNote = type === NodeType.NOTE;
   const hasFiles = data.files && Object.keys(data.files).length > 0;
 
@@ -56,6 +56,20 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       borderClass = "border-green-500";
       titleColor = "text-green-400";
       portColor = "bg-green-500";
+      break;
+    case NodeType.READ_FILE:
+      Icon = FolderOpen;
+      bgClass = "bg-gray-800";
+      borderClass = "border-blue-300";
+      titleColor = "text-blue-300";
+      portColor = "bg-blue-300";
+      break;
+    case NodeType.WRITE_FILE:
+      Icon = Save;
+      bgClass = "bg-gray-800";
+      borderClass = "border-red-300";
+      titleColor = "text-red-300";
+      portColor = "bg-red-300";
       break;
     case NodeType.GEMINI_GENERATE:
       Icon = Sparkles; 
@@ -70,6 +84,20 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       borderClass = "border-orange-500";
       titleColor = "text-orange-400";
       portColor = "bg-orange-500";
+      break;
+    case NodeType.AI_DEBATE:
+      Icon = Users;
+      bgClass = "bg-gray-800";
+      borderClass = "border-pink-400";
+      titleColor = "text-pink-400";
+      portColor = "bg-pink-400";
+      break;
+    case NodeType.MULTI_CHECK:
+      Icon = Layers;
+      bgClass = "bg-gray-800";
+      borderClass = "border-indigo-300";
+      titleColor = "text-indigo-300";
+      portColor = "bg-indigo-300";
       break;
     case NodeType.AI_UNIT_TEST:
       Icon = FlaskConical;
@@ -126,6 +154,20 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       borderClass = "border-rose-500";
       titleColor = "text-rose-400";
       portColor = "bg-rose-500";
+      break;
+    case NodeType.LOOP:
+      Icon = Repeat;
+      bgClass = "bg-gray-900";
+      borderClass = "border-violet-500";
+      titleColor = "text-violet-400";
+      portColor = "bg-violet-500";
+      break;
+    case NodeType.ROUTER:
+      Icon = GitFork;
+      bgClass = "bg-gray-900";
+      borderClass = "border-yellow-200";
+      titleColor = "text-yellow-200";
+      portColor = "bg-yellow-200";
       break;
     case NodeType.NOTE:
       Icon = StickyNote;
@@ -208,6 +250,15 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
         const model = data.model || '';
         let AiIcon = Bot;
         let tooltip = "Default AI";
+        
+        if (type === NodeType.MULTI_CHECK) {
+            return (
+                <div className={badgeCommon} title="Multi-Provider Check">
+                    <Layers className="w-3.5 h-3.5" />
+                </div>
+            );
+        }
+
         if (provider === 'gemini' || (!provider && model.includes('gemini'))) { AiIcon = Sparkles; tooltip = "Gemini"; } 
         else if (provider === 'deepseek' || (!provider && model.includes('deepseek'))) { AiIcon = Brain; tooltip = "DeepSeek"; } 
         else if (provider === 'qwen' || (!provider && model.includes('qwen'))) { AiIcon = Cloud; tooltip = "Qwen"; } 
@@ -236,6 +287,10 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       if (type === NodeType.TODO_LIST) return data.todo;
       if (type === NodeType.DIFF) return "Comparing inputs...";
       if (type === NodeType.APPROVAL) return "Waiting for human confirmation...";
+      if (type === NodeType.LOOP) return `Max Retries: ${data.maxIterations || 3}`;
+      if (type === NodeType.READ_FILE) return data.localPath ? `Reading: ${data.localPath}` : "No file loaded.";
+      if (type === NodeType.WRITE_FILE) return data.localPath ? `Writing to: ${data.localPath}` : "No path set.";
+      if (type === NodeType.ROUTER) return `Logic Result: ${data.output || 'Pending'}`;
       if (data.output) return data.output;
       return data.prompt || "No details.";
   };
@@ -338,6 +393,14 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
                         </div>
                     )}
                     
+                    {/* Loop Iteration Badge */}
+                    {type === NodeType.LOOP && (
+                        <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-violet-900/50 border border-violet-600/50 text-[9px] font-medium uppercase tracking-wider text-violet-300`}>
+                            <Repeat className="w-2.5 h-2.5" />
+                            <span>{data.currentIteration || 0}/{data.maxIterations || 3}</span>
+                        </div>
+                    )}
+
                     {/* Multi-file indicator Badge */}
                     {!isNote && hasFiles && (
                          <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-900/50 border border-blue-600/50 text-[9px] font-medium uppercase tracking-wider text-blue-300`}>

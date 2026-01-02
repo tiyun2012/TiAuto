@@ -103,11 +103,8 @@ class OpenAICompatibleStrategy implements AIProviderStrategy {
         };
 
         // Handle JSON Mode
-        // Note: Generic OpenAI compatible often supports json_object, but structured outputs (response_format with schema) vary.
-        // We will assume json_object if schema is present, and append schema to prompt.
         if (params.responseSchema) {
             config.response_format = { type: "json_object" };
-            // Append schema instruction to prompt because many providers ignore schema in tools/response_format
             messages[0].content += "\n\nOutput strictly valid JSON.";
         }
 
@@ -194,6 +191,86 @@ export const generateCode = async (
         model: modelOverride,
         tools
     });
+};
+
+// --- NEW: AI DEBATE LOGIC ---
+export const runDebate = async (
+    context: string,
+    topic: string,
+    personaA: string,
+    personaB: string,
+    rounds: number,
+    settings: AISettings,
+    modelOverride?: string,
+    providerOverride?: AIProvider
+): Promise<string> => {
+    const strategy = getProviderStrategy(settings, providerOverride);
+    
+    let conversation = `CONTEXT:\n${context}\n\nTOPIC:\n${topic}\n\n`;
+    let currentResponse = "";
+
+    // Simulate rounds
+    for (let i = 1; i <= rounds; i++) {
+        // Turn A
+        const promptA = `
+            ${conversation}
+            
+            ACT AS: ${personaA}
+            TASK: Review the current state and provide your input/critique. Be constructive but strict.
+        `;
+        const resA = await strategy.generate({ prompt: promptA, systemInstruction: `You are ${personaA}.`, model: modelOverride });
+        conversation += `\n\n[${personaA}]: ${resA.text}`;
+
+        // Turn B
+        const promptB = `
+            ${conversation}
+            
+            ACT AS: ${personaB}
+            TASK: Review the previous input from ${personaA}. Agree, disagree, or improve it.
+        `;
+        const resB = await strategy.generate({ prompt: promptB, systemInstruction: `You are ${personaB}.`, model: modelOverride });
+        conversation += `\n\n[${personaB}]: ${resB.text}`;
+    }
+
+    // Final Summary
+    const summaryPrompt = `
+        ${conversation}
+
+        TASK: Based on the debate above, provide the FINAL, OPTIMIZED solution (Code or Text). 
+        Ignore the chat history in the final output, just give the result.
+    `;
+    const finalRes = await strategy.generate({ prompt: summaryPrompt, systemInstruction: "You are the moderator. Consolidate the debate into a final result.", model: modelOverride });
+
+    return `### DEBATE TRANSCRIPT\n${conversation}\n\n### FINAL RESULT\n${finalRes.text}`;
+};
+
+// --- NEW: MULTI-PROVIDER CHECK ---
+export const runMultiProviderCheck = async (
+    prompt: string,
+    context: string,
+    providers: AIProvider[],
+    settings: AISettings
+): Promise<string> => {
+    
+    const results: string[] = [];
+    
+    // Create an array of promises to run in parallel
+    const promises = providers.map(async (provider) => {
+        try {
+            const strategy = getProviderStrategy(settings, provider);
+            // We strip model override to let each strategy use its default or settings default
+            const res = await strategy.generate({ 
+                prompt: `CONTEXT:\n${context}\n\nTASK: ${prompt}`, 
+                systemInstruction: "You are a specialized QA Auditor." 
+            });
+            return `### REPORT FROM ${provider.toUpperCase()}\n${res.text}`;
+        } catch (e: any) {
+            return `### REPORT FROM ${provider.toUpperCase()}\nFAILED: ${e.message}`;
+        }
+    });
+
+    const outcomes = await Promise.all(promises);
+    return outcomes.join('\n\n' + '-'.repeat(40) + '\n\n');
 };
 
 export const refineCode = async (originalCode: string, instructions: string, settings: AISettings, modelOverride?: string, providerOverride?: AIProvider): Promise<string> => {
