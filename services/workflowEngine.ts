@@ -74,9 +74,27 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
         return "Workflow started manually.";
     },
 
-    [NodeType.READ_FILE]: async ({ node, aiSettings }) => {
-        if (node.data.useLocalBridge && node.data.localPath) {
-            return await bridgeReadFile(node.data.localPath, aiSettings);
+    [NodeType.READ_FILE]: async ({ node, parents, aiSettings }) => {
+        // 1. DYNAMIC PATH LOGIC
+        // If connected to an Iterator or similar, try to extract the filename from the parent's text output
+        let path = node.data.localPath;
+        
+        if (node.data.useLocalBridge && !path) {
+             // Look through parents for a dynamic path suggestion
+             for (const p of parents) {
+                 // Regex matches "File: src/app.ts" or "File: /path/to/file.txt"
+                 const dynamicMatch = p.data.output?.match(/File:\s*([^\n]+)/);
+                 if (dynamicMatch) {
+                     path = dynamicMatch[1].trim();
+                     // console.log(`[Dynamic Read] Detected path from parent ${p.data.label}: ${path}`);
+                     break; 
+                 }
+             }
+        }
+
+        // 2. EXECUTION
+        if (node.data.useLocalBridge && path) {
+            return await bridgeReadFile(path, aiSettings);
         } else {
             if (!node.data.code) throw new Error("No file uploaded or local path specified.");
             return node.data.code;

@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { Node, NodeType, NodeShape, AISettings, AIProvider } from '../types';
 import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2, AlertTriangle, AlertCircle, Info, CheckCircle2, Bot, Brain, Globe, ExternalLink, Wrench, Server, Zap, Lightbulb, BookOpen, Download, FileCode, FileJson, FileType, Code2, Repeat, FolderOpen, Users, Layers, GitFork, Network, Save, Briefcase, GitBranch, ArrowRightLeft } from 'lucide-react';
@@ -154,6 +152,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
           case NodeType.ROUTER: return "Evaluates a condition using AI and returns TRUE or FALSE.";
           case NodeType.ARCHITECT: return "Analyzes requirements and creates a structured plan for downstream nodes.";
           case NodeType.GIT_CONTROL: return "Manages version control operations (Commit, Push) via the Local Bridge.";
+          case NodeType.PROJECT_INDEX: return "Scans the local directory via Bridge and lists files. Feed this into the Architect so it knows the project structure.";
+          case NodeType.TASK_ITERATOR: return "Takes a JSON plan from the Architect and executes the downstream nodes once for each task in the list.";
           default: return "Configure the settings above to control this node.";
       }
   };
@@ -259,6 +259,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
             node.type === NodeType.ROUTER ? 'bg-yellow-200' :
             node.type === NodeType.ARCHITECT ? 'bg-emerald-300' :
             node.type === NodeType.GIT_CONTROL ? 'bg-orange-300' :
+            node.type === NodeType.PROJECT_INDEX ? 'bg-cyan-300' :
+            node.type === NodeType.TASK_ITERATOR ? 'bg-violet-300' :
             node.type === NodeType.TODO_LIST ? 'bg-teal-500' : 'bg-yellow-500'
           }`}></span>
           {node.type.replace('_', ' ')}
@@ -524,13 +526,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
                             </label>
                         </div>
                         {node.data.useLocalBridge && (
-                            <input 
-                                type="text"
-                                placeholder="/path/to/file.txt"
-                                value={node.data.localPath || ''}
-                                onChange={(e) => onUpdateNode(node.id, { localPath: e.target.value })}
-                                className="w-full bg-gray-800 border border-indigo-900/50 rounded p-2 text-sm font-mono focus:ring-1 focus:ring-indigo-500"
-                            />
+                            <div className="space-y-1">
+                                <input 
+                                    type="text"
+                                    placeholder="/path/to/file.txt"
+                                    value={node.data.localPath || ''}
+                                    onChange={(e) => onUpdateNode(node.id, { localPath: e.target.value })}
+                                    className="w-full bg-gray-800 border border-indigo-900/50 rounded p-2 text-sm font-mono focus:ring-1 focus:ring-indigo-500"
+                                />
+                                <p className="text-[10px] text-gray-500">Leave blank to auto-read from Task Iterator.</p>
+                            </div>
                         )}
                     </div>
                 )}

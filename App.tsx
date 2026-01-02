@@ -9,7 +9,7 @@ import { Node, Edge, INITIAL_NODES, INITIAL_EDGES, NodeType, AISettings, AIProvi
 import { executeNode } from './services/workflowEngine';
 import { refineCode } from './services/geminiService';
 import { parseOutputToFiles } from './services/fileParsingService';
-import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson, Settings, Key, Server, Link } from 'lucide-react';
+import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson, Settings, Key, Server, Link, Network } from 'lucide-react';
 import { APP_TEMPLATES, Template } from './data/templates';
 
 export default function App() {
@@ -38,7 +38,10 @@ export default function App() {
 
       openaiKey: '',
       openaiUrl: 'https://api.openai.com/v1',
-      openaiModel: 'gpt-4o'
+      openaiModel: 'gpt-4o',
+
+      localBridgeEnabled: false,
+      localBridgeUrl: 'http://localhost:3000'
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -177,6 +180,8 @@ export default function App() {
                type === NodeType.TRIGGER ? 'Manual Trigger' : 
                type === NodeType.APPROVAL ? 'Wait for Approval' :
                type === NodeType.LOOP ? 'Loop Controller' :
+               type === NodeType.READ_FILE ? 'Read File' :
+               type === NodeType.WRITE_FILE ? 'Write File' :
                type === NodeType.SHELL_EXEC ? 'Shell Cmd' : 'Note',
         status: 'idle',
         shape: defaultShape, 
@@ -253,14 +258,30 @@ export default function App() {
     setToast({ message: "Created Auto-Fix Node", type: "success" });
   };
 
-  // Execution
-  const executeGraph = async (startNodes: Node[]) => {
-    setIsExecuting(true);
-    let currentNodes = [...nodes];
-    await runExecutionLoop(startNodes, currentNodes);
+  const getDownstreamNodes = (nodeId: string, currentNodes: Node[], currentEdges: Edge[]) => {
+      const downstreamIds = new Set<string>();
+      const queue = [nodeId];
+      
+      while(queue.length > 0) {
+          const current = queue.shift()!;
+          const children = currentEdges.filter(e => e.source === current).map(e => e.target);
+          children.forEach(child => {
+              if(!downstreamIds.has(child)) {
+                  downstreamIds.add(child);
+                  queue.push(child);
+              }
+          });
+      }
+      return downstreamIds;
   };
 
-  const runExecutionLoop = async (queue: Node[], currentNodes: Node[]) => {
+  // Execution
+  const executeGraph = async (startNodes: Node[], initialNodes: Node[]): Promise<Node[]> => {
+    return await runExecutionLoop(startNodes, initialNodes);
+  };
+
+  const runExecutionLoop = async (queue: Node[], initialNodes: Node[]): Promise<Node[]> => {
+      let currentNodes = [...initialNodes];
       const visited = new Set<string>();
       const executed = new Set<string>();
       
@@ -271,7 +292,6 @@ export default function App() {
         
         // If node already successfully executed this run, skip re-execution but check children
         if (executed.has(currentNode.id) || currentNode.data.status === 'success') {
-             // Just add children to queue
              const childrenEdges = edges.filter(e => e.source === currentNode.id);
              childrenEdges.forEach(e => {
                  const childNode = currentNodes.find(n => n.id === e.target);
@@ -293,27 +313,21 @@ export default function App() {
         try {
             await executeNode(currentNode, currentNodes, edges, aiSettings, (id, data) => {
                 currentNodes = currentNodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n);
+                // Also update React state for visual feedback
                 setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n));
             });
         } catch (error: any) {
              if (error.message === "LOOP_TRIGGERED") {
                  setToast({ message: "Loop Triggered: Issues found, rewinding...", type: 'info' });
-                 // Find nodes that have been reset to 'idle' by the Loop logic and add them to queue
-                 // We simply scan for 'idle' nodes that are not in queue and not visited to be safe
-                 // But realistically, the Loop logic reset the Generator. We just need to add the Generator back.
-                 // The simplest way: Add ALL 'idle' nodes to the queue that are reachable.
-                 // Optimization: The loop logic reset specific parents. We can re-scan 'idle' nodes in currentNodes.
                  const idleNodes = currentNodes.filter(n => n.data.status === 'idle');
                  idleNodes.forEach(n => {
-                     // Add to queue if not already there
                      if (!queue.find(q => q.id === n.id)) {
-                         queue.unshift(n); // Prepend to execute them next
+                         queue.unshift(n); 
                      }
-                     // Remove from visited/executed so they can run again
                      visited.delete(n.id);
                      executed.delete(n.id);
                  });
-                 continue; // Restart loop
+                 continue; 
              }
              if (error.message === "WAIT_FOR_APPROVAL") {
                  setToast({ message: "Workflow Paused for Approval", type: 'info' });
@@ -340,23 +354,65 @@ export default function App() {
         
         await new Promise(r => setTimeout(r, 600));
       }
+      return currentNodes;
   };
 
   const handleRunWorkflow = async (resume = false) => {
     if (isExecuting) return;
     setToast({ message: resume ? "Resuming Workflow..." : "Workflow Started...", type: "info" });
+    setIsExecuting(true);
     
     // If not resuming, reset all to idle
+    let workingNodes = [...nodes];
     if (!resume) {
-        setNodes(prev => prev.map(n => ({ ...n, data: { ...n.data, status: 'idle', errorMessage: undefined, currentIteration: 0, feedback: undefined } })));
+        workingNodes = workingNodes.map(n => ({ ...n, data: { ...n.data, status: 'idle', errorMessage: undefined, currentIteration: 0, feedback: undefined } }));
+        setNodes(workingNodes);
     }
 
     setTimeout(async () => {
         try {
-            // If resuming, start from Approval nodes that are success or standard triggers
-            const startNodes = nodes.filter(n => n.type === NodeType.TRIGGER || (resume && n.type === NodeType.APPROVAL && n.data.status === 'success'));
-            if (startNodes.length === 0) throw new Error("No Start Trigger found.");
-            await executeGraph(startNodes);
+            let flowComplete = false;
+            let currentStartNodes = workingNodes.filter(n => n.type === NodeType.TRIGGER || (resume && n.type === NodeType.APPROVAL && n.data.status === 'success'));
+            if (currentStartNodes.length === 0 && !resume) throw new Error("No Start Trigger found.");
+            
+            // "Engine Driver" Loop
+            while(!flowComplete) {
+                // Run Graph
+                workingNodes = await executeGraph(currentStartNodes, workingNodes);
+                
+                // Check for Active Iterator
+                const iterator = workingNodes.find(n => n.type === NodeType.TASK_ITERATOR);
+                
+                if (iterator && !iterator.data.iteratorFinished && iterator.data.status === 'success') {
+                     // Iterator is active and just finished a cycle (status success)
+                     // Reset downstream nodes to idle to allow re-execution
+                     const toReset = getDownstreamNodes(iterator.id, workingNodes, edges);
+                     
+                     workingNodes = workingNodes.map(n => {
+                         if (toReset.has(n.id)) {
+                             return { ...n, data: { ...n.data, status: 'idle', output: undefined, files: undefined } };
+                         }
+                         // Also reset the iterator status to idle so it can run again (increment index)
+                         if (n.id === iterator.id) {
+                              return { ...n, data: { ...n.data, status: 'idle' } };
+                         }
+                         return n;
+                     });
+                     
+                     // Sync UI
+                     setNodes([...workingNodes]);
+                     
+                     // Next run starts from Iterator
+                     const nextIterator = workingNodes.find(n => n.id === iterator.id);
+                     if (nextIterator) currentStartNodes = [nextIterator];
+                     
+                     console.log(`[Engine Driver] Iterator active. Index: ${iterator.data.iteratorIndex}. Looping...`);
+                     await new Promise(r => setTimeout(r, 1000));
+                } else {
+                    flowComplete = true;
+                }
+            }
+            
             setToast({ message: "Workflow Completed.", type: "success" });
         } catch (error: any) {
             if (error.message !== "WAIT_FOR_APPROVAL") {
@@ -456,12 +512,8 @@ export default function App() {
                     <div className="flex items-center -space-x-2">
                         {/* Gemini Dot */}
                         <div className={`w-3 h-3 rounded-full border-2 border-gray-900 ${aiSettings.geminiKey ? 'bg-blue-500' : 'bg-gray-700'}`} title="Gemini"></div>
-                        {/* DeepSeek Dot */}
-                        <div className={`w-3 h-3 rounded-full border-2 border-gray-900 ${aiSettings.deepseekKey ? 'bg-purple-500' : 'bg-gray-700'}`} title="DeepSeek"></div>
-                        {/* Qwen Dot */}
-                        <div className={`w-3 h-3 rounded-full border-2 border-gray-900 ${aiSettings.qwenKey ? 'bg-orange-500' : 'bg-gray-700'}`} title="Qwen"></div>
-                        {/* OpenAI Dot */}
-                        <div className={`w-3 h-3 rounded-full border-2 border-gray-900 ${aiSettings.openaiKey ? 'bg-green-500' : 'bg-gray-700'}`} title="OpenAI"></div>
+                        {/* Local Bridge Dot */}
+                        <div className={`w-3 h-3 rounded-full border-2 border-gray-900 ${aiSettings.localBridgeEnabled ? 'bg-green-500' : 'bg-gray-700'}`} title="Local Bridge"></div>
                     </div>
                     <div className="flex flex-col items-start">
                         <span className="text-[10px] font-bold text-gray-400 group-hover:text-white leading-none uppercase tracking-wider">Providers</span>
@@ -540,7 +592,7 @@ export default function App() {
             <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center animate-in fade-in">
                 <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
                     <div className="p-4 border-b border-gray-800 flex justify-between">
-                         <h2 className="text-lg font-semibold flex items-center gap-2"><Settings className="w-5 h-5" /> AI Providers</h2>
+                         <h2 className="text-lg font-semibold flex items-center gap-2"><Settings className="w-5 h-5" /> Settings</h2>
                         <button onClick={() => setShowSettings(false)}><X className="w-5 h-5" /></button>
                     </div>
                     <div className="p-6 overflow-y-auto space-y-8">
@@ -559,7 +611,31 @@ export default function App() {
                                      </button>
                                  ))}
                              </div>
-                             <p className="text-xs text-gray-500">Nodes will use this provider unless overridden individually.</p>
+                        </div>
+
+                        {/* Local Bridge Config - Highlighting this for Project Management */}
+                        <div className="space-y-3 pb-6 border-b border-gray-800 bg-gray-850/50 p-4 rounded-lg border border-indigo-900/30">
+                            <h3 className="font-medium text-white flex items-center gap-2"><Network className="w-4 h-4 text-indigo-400" /> Local Bridge (Game Engine Mode)</h3>
+                            <p className="text-xs text-gray-400">Enables Read/Write/Run on your local machine via a local server.</p>
+                            
+                            <div className="flex items-center gap-3">
+                                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={aiSettings.localBridgeEnabled} 
+                                        onChange={(e) => setAiSettings(s => ({...s, localBridgeEnabled: e.target.checked}))}
+                                        className="rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500/20"
+                                    />
+                                    Enable Bridge
+                                </label>
+                                <input 
+                                    type="text" 
+                                    value={aiSettings.localBridgeUrl} 
+                                    onChange={(e) => setAiSettings(s => ({...s, localBridgeUrl: e.target.value}))} 
+                                    className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm" 
+                                    placeholder="http://localhost:3000" 
+                                />
+                            </div>
                         </div>
 
                         {/* Gemini Config */}
@@ -582,44 +658,6 @@ export default function App() {
                                 <div className="space-y-1">
                                     <label className="text-xs text-gray-400">Model Name</label>
                                     <input type="text" value={aiSettings.deepseekModel} onChange={(e) => setAiSettings(s => ({...s, deepseekModel: e.target.value}))} className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm" />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Qwen Config */}
-                        <div className="space-y-3">
-                            <h3 className="font-medium text-white flex items-center gap-2"><span className="w-2 h-6 bg-orange-500 rounded-full"></span> Qwen (Alibaba)</h3>
-                            <div className="space-y-1">
-                                <label className="text-xs text-gray-400">API Key (DashScope)</label>
-                                <input type="password" value={aiSettings.qwenKey} onChange={(e) => setAiSettings(s => ({...s, qwenKey: e.target.value}))} className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm" placeholder="sk-..." />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-xs text-gray-400 flex items-center gap-1"><Link className="w-3 h-3"/> Base URL</label>
-                                    <input type="text" value={aiSettings.qwenUrl} onChange={(e) => setAiSettings(s => ({...s, qwenUrl: e.target.value}))} className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm" placeholder="https://..." />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs text-gray-400">Model Name</label>
-                                    <input type="text" value={aiSettings.qwenModel} onChange={(e) => setAiSettings(s => ({...s, qwenModel: e.target.value}))} className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm" placeholder="qwen-max" />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* OpenAI Config */}
-                        <div className="space-y-3">
-                            <h3 className="font-medium text-white flex items-center gap-2"><span className="w-2 h-6 bg-green-500 rounded-full"></span> OpenAI / Compatible</h3>
-                             <div className="space-y-1">
-                                <label className="text-xs text-gray-400">API Key</label>
-                                <input type="password" value={aiSettings.openaiKey} onChange={(e) => setAiSettings(s => ({...s, openaiKey: e.target.value}))} className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm" placeholder="sk-..." />
-                            </div>
-                             <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-xs text-gray-400 flex items-center gap-1"><Link className="w-3 h-3"/> Base URL</label>
-                                    <input type="text" value={aiSettings.openaiUrl} onChange={(e) => setAiSettings(s => ({...s, openaiUrl: e.target.value}))} className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm" placeholder="https://api.openai.com/v1" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs text-gray-400">Model Name</label>
-                                    <input type="text" value={aiSettings.openaiModel} onChange={(e) => setAiSettings(s => ({...s, openaiModel: e.target.value}))} className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm" placeholder="gpt-4o" />
                                 </div>
                             </div>
                         </div>
