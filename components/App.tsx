@@ -281,7 +281,7 @@ export default function App() {
   // Execution
   const executeGraph = async (startNodes: Node[], initialNodes: Node[]) => {
     setIsExecuting(true);
-    // Use nodesRef.current to get the most up-to-date state for execution
+    // Use initialNodes passed from loop to ensure fresh state within the execution context
     await runExecutionLoop(startNodes, initialNodes);
   };
 
