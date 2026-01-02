@@ -4,16 +4,18 @@ export enum NodeType {
   TRIGGER = 'TRIGGER',
   GEMINI_GENERATE = 'GEMINI_GENERATE',
   GEMINI_CHECK = 'GEMINI_CHECK',
-  AI_DEBATE = 'AI_DEBATE',       // New: Multi-persona discussion
-  MULTI_CHECK = 'MULTI_CHECK',   // New: Run against multiple providers
-  ROUTER = 'ROUTER',             // New: Logic Branching
+  AI_DEBATE = 'AI_DEBATE',       
+  MULTI_CHECK = 'MULTI_CHECK',   
+  ROUTER = 'ROUTER',             
+  ARCHITECT = 'ARCHITECT',       // New: Planning Agent
   AI_UNIT_TEST = 'AI_UNIT_TEST',
   SIMULATE_RUN = 'SIMULATE_RUN',
   PYTHON_EXEC = 'PYTHON_EXEC',
   SHELL_EXEC = 'SHELL_EXEC',
+  GIT_CONTROL = 'GIT_CONTROL',   // New: Version Control
   VS_CODE = 'VS_CODE',
   READ_FILE = 'READ_FILE',
-  WRITE_FILE = 'WRITE_FILE',     // New: Save to disk via Bridge
+  WRITE_FILE = 'WRITE_FILE',     
   TODO_LIST = 'TODO_LIST',
   NOTE = 'NOTE',
   DIFF = 'DIFF',
@@ -49,6 +51,10 @@ export interface NodeData {
   // Local Bridge Config
   useLocalBridge?: boolean;
   localPath?: string;
+
+  // Git Config
+  gitCommand?: 'status' | 'add' | 'commit' | 'push' | 'log';
+  gitMessage?: string;
 
   useAiSimulation?: boolean;
   output?: string;

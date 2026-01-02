@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Node, NodeType, NodeShape, AISettings, AIProvider } from '../types';
-import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2, AlertTriangle, AlertCircle, Info, CheckCircle2, Bot, Brain, Globe, ExternalLink, Wrench, Server, Zap, Lightbulb, BookOpen, Download, FileCode, FileJson, FileType, Code2, Repeat, FolderOpen, Users, Layers, GitFork, Network, Save } from 'lucide-react';
+import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2, AlertTriangle, AlertCircle, Info, CheckCircle2, Bot, Brain, Globe, ExternalLink, Wrench, Server, Zap, Lightbulb, BookOpen, Download, FileCode, FileJson, FileType, Code2, Repeat, FolderOpen, Users, Layers, GitFork, Network, Save, Briefcase, GitBranch, ArrowRightLeft } from 'lucide-react';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import { GEMINI_MODELS, DEEPSEEK_MODELS, QWEN_MODELS, OPENAI_MODELS } from '../constants';
+import { bridgeWriteFile } from '../services/localBridgeService';
 
 interface PropertiesPanelProps {
   node: Node | null;
@@ -20,6 +21,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [refinementInput, setRefinementInput] = useState("");
   const [isRefining, setIsRefining] = useState(false);
+  const [targetDiffPath, setTargetDiffPath] = useState("");
 
   // Set default active file
   useEffect(() => {
@@ -84,6 +86,25 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
       URL.revokeObjectURL(url);
   };
 
+  const handleMergeDiff = async () => {
+      if (!node.data.diffModified) return;
+      if (!targetDiffPath && !aiSettings.localBridgeEnabled) {
+          alert("Cannot merge: No target path or Bridge disabled.");
+          return;
+      }
+      if(aiSettings.localBridgeEnabled && targetDiffPath) {
+          try {
+              await bridgeWriteFile(targetDiffPath, node.data.diffModified, aiSettings);
+              alert("Successfully merged to local disk.");
+          } catch(e: any) {
+              alert("Merge failed: " + e.message);
+          }
+      } else {
+          // Simulation
+          alert("Simulation: Merged content would be written to disk.");
+      }
+  };
+
   // Handle local file selection
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -102,7 +123,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
 
   const currentShape = node.data.shape || 'rectangle';
   const hasMultipleFiles = node.data.files && Object.keys(node.data.files).length > 0;
-  const isGenerative = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.AI_UNIT_TEST, NodeType.SIMULATE_RUN, NodeType.LOOP, NodeType.AI_DEBATE, NodeType.MULTI_CHECK].includes(node.type);
+  const isGenerative = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.AI_UNIT_TEST, NodeType.SIMULATE_RUN, NodeType.LOOP, NodeType.AI_DEBATE, NodeType.MULTI_CHECK, NodeType.ARCHITECT].includes(node.type);
 
   // Determine active provider for this node (Override > Global)
   const activeProvider = node.data.provider || aiSettings.provider;
@@ -131,6 +152,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
           case NodeType.AI_DEBATE: return "Simulates a conversation between two AI Personas to refine ideas before output.";
           case NodeType.MULTI_CHECK: return "Runs the check against multiple AI providers simultaneously for robust consensus.";
           case NodeType.ROUTER: return "Evaluates a condition using AI and returns TRUE or FALSE.";
+          case NodeType.ARCHITECT: return "Analyzes requirements and creates a structured plan for downstream nodes.";
+          case NodeType.GIT_CONTROL: return "Manages version control operations (Commit, Push) via the Local Bridge.";
           default: return "Configure the settings above to control this node.";
       }
   };
@@ -234,6 +257,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
             node.type === NodeType.AI_DEBATE ? 'bg-pink-400' :
             node.type === NodeType.MULTI_CHECK ? 'bg-indigo-300' :
             node.type === NodeType.ROUTER ? 'bg-yellow-200' :
+            node.type === NodeType.ARCHITECT ? 'bg-emerald-300' :
+            node.type === NodeType.GIT_CONTROL ? 'bg-orange-300' :
             node.type === NodeType.TODO_LIST ? 'bg-teal-500' : 'bg-yellow-500'
           }`}></span>
           {node.type.replace('_', ' ')}
@@ -441,6 +466,47 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
             </div>
         )}
 
+        {/* GIT_CONTROL Config */}
+        {node.type === NodeType.GIT_CONTROL && (
+            <div className="space-y-4 p-4 bg-orange-900/20 border border-orange-800/50 rounded-lg">
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-orange-400 uppercase tracking-wider">Command</label>
+                    <select 
+                        value={node.data.gitCommand || 'status'}
+                        onChange={(e) => onUpdateNode(node.id, { gitCommand: e.target.value })}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white"
+                    >
+                        <option value="status">Status</option>
+                        <option value="add">Add All (git add .)</option>
+                        <option value="commit">Commit</option>
+                        <option value="push">Push</option>
+                        <option value="log">Log</option>
+                    </select>
+                </div>
+                {node.data.gitCommand === 'commit' && (
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-orange-400 uppercase tracking-wider">Message</label>
+                        <input 
+                            type="text"
+                            placeholder="Commit message..."
+                            value={node.data.gitMessage || ''}
+                            onChange={(e) => onUpdateNode(node.id, { gitMessage: e.target.value })}
+                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm"
+                        />
+                    </div>
+                )}
+                <div className="flex items-center gap-2 mt-2">
+                    <input 
+                        type="checkbox" 
+                        checked={node.data.useLocalBridge || true}
+                        disabled
+                        className="rounded bg-gray-700 border-gray-600 text-orange-500"
+                    />
+                    <span className="text-xs text-gray-400">Always uses Local Bridge</span>
+                </div>
+            </div>
+        )}
+
         {/* READ_FILE Config */}
         {node.type === NodeType.READ_FILE && (
             <div className="space-y-4">
@@ -637,8 +703,26 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
 
         {node.type === NodeType.DIFF && (
             <div className="space-y-2 flex flex-col h-48">
-                <label className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Original Text (Optional)</label>
-                <div className="flex-1 border border-gray-700 rounded overflow-hidden">
+                <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Input Config</label>
+                    <div className="flex gap-2">
+                        <input 
+                            type="text" 
+                            placeholder="Target Path (optional)"
+                            className="bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs w-32"
+                            value={targetDiffPath}
+                            onChange={(e) => setTargetDiffPath(e.target.value)}
+                        />
+                        <button 
+                            onClick={handleMergeDiff}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-0.5 rounded text-xs flex items-center gap-1"
+                            title="Write Modified to Disk"
+                        >
+                            <ArrowRightLeft className="w-3 h-3" /> Merge
+                        </button>
+                    </div>
+                </div>
+                <div className="flex-1 border border-gray-700 rounded overflow-hidden mt-1">
                     <Editor
                         height="100%"
                         defaultLanguage="markdown"
@@ -660,6 +744,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
                     node.type === NodeType.AI_DEBATE ? 'Debate Topic' :
                     node.type === NodeType.MULTI_CHECK ? 'Instruction for All Providers' :
                     node.type === NodeType.ROUTER ? 'Condition (e.g. Is code correct?)' :
+                    node.type === NodeType.ARCHITECT ? 'Project Requirements' :
                     'Prompt / Instructions'}
                 </label>
                 <div className="flex-1 border border-gray-700 rounded overflow-hidden">

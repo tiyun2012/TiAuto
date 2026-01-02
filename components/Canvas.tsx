@@ -4,7 +4,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Node, Edge, NodeType, NodeShape } from '../types';
 import NodeComponent from './NodeComponent';
 import { getPortPosition } from '../constants';
-import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical, FileDiff, ThumbsUp, Repeat, FolderOpen, Users, Layers, GitFork, Save } from 'lucide-react';
+import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical, FileDiff, ThumbsUp, Repeat, FolderOpen, Users, Layers, GitFork, Save, GitBranch, Briefcase } from 'lucide-react';
 
 interface CanvasProps {
   nodes: Node[];
@@ -22,8 +22,10 @@ interface CanvasProps {
 // Node definitions for the picker
 const NODE_OPTIONS = [
   { type: NodeType.TRIGGER, label: 'Trigger', icon: Play, desc: 'Start workflow', color: 'text-green-400' },
+  { type: NodeType.ARCHITECT, label: 'Architect', icon: Briefcase, desc: 'Plan project structure', color: 'text-emerald-300' },
   { type: NodeType.READ_FILE, label: 'Read File', icon: FolderOpen, desc: 'Load local content', color: 'text-blue-300' },
   { type: NodeType.WRITE_FILE, label: 'Write File', icon: Save, desc: 'Save to disk (Bridge)', color: 'text-red-300' },
+  { type: NodeType.GIT_CONTROL, label: 'Git Control', icon: GitBranch, desc: 'Commit & Push', color: 'text-orange-300' },
   { type: NodeType.GEMINI_GENERATE, label: 'AI Generator', icon: FileCode, desc: 'Write code', color: 'text-purple-400' },
   { type: NodeType.AI_DEBATE, label: 'AI Debate', icon: Users, desc: 'Multi-persona discussion', color: 'text-pink-400' },
   { type: NodeType.GEMINI_CHECK, label: 'AI Security', icon: ShieldCheck, desc: 'Audit code', color: 'text-orange-400' },

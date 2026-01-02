@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { NodeType } from '../types';
-import { Play, Sparkles, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, SquareTerminal, FlaskConical, FileDiff, ThumbsUp, Repeat, FolderOpen, Users, Layers, GitFork } from 'lucide-react';
+import { Play, Sparkles, ShieldCheck, Terminal, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, SquareTerminal, FlaskConical, FileDiff, ThumbsUp, Repeat, FolderOpen, Users, Layers, GitFork, Save, GitBranch, Briefcase } from 'lucide-react';
 
 interface SidebarProps {
   onAddNode: (type: NodeType) => void;
@@ -48,6 +48,30 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
             color="text-blue-300" 
             onClick={() => onAddNode(NodeType.READ_FILE)}
             type={NodeType.READ_FILE} 
+        />
+        <ToolButton 
+            icon={<Save />} 
+            label="Write File" 
+            tooltip="Save content to disk."
+            color="text-red-300" 
+            onClick={() => onAddNode(NodeType.WRITE_FILE)}
+            type={NodeType.WRITE_FILE} 
+        />
+        <ToolButton 
+            icon={<GitBranch />} 
+            label="Git" 
+            tooltip="Version Control (Commit/Push)."
+            color="text-orange-300" 
+            onClick={() => onAddNode(NodeType.GIT_CONTROL)}
+            type={NodeType.GIT_CONTROL} 
+        />
+        <ToolButton 
+            icon={<Briefcase />} 
+            label="Architect" 
+            tooltip="Plan project structure."
+            color="text-emerald-300" 
+            onClick={() => onAddNode(NodeType.ARCHITECT)}
+            type={NodeType.ARCHITECT} 
         />
         <ToolButton 
             icon={<Sparkles />} 
@@ -96,14 +120,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, onRunWorkflow, isExecuting
             color="text-yellow-200" 
             onClick={() => onAddNode(NodeType.ROUTER)}
             type={NodeType.ROUTER} 
-        />
-        <ToolButton 
-            icon={<ThumbsUp />} 
-            label="Confirm" 
-            tooltip="Human Approval Step."
-            color="text-rose-400" 
-            onClick={() => onAddNode(NodeType.APPROVAL)}
-            type={NodeType.APPROVAL} 
         />
         <ToolButton 
             icon={<FlaskConical />} 
@@ -180,8 +196,8 @@ const ToolButton = ({ icon, label, tooltip, onClick, color, type }: { icon: any,
         e.dataTransfer.effectAllowed = 'move';
     };
 
-    const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST, NodeType.AI_DEBATE, NodeType.MULTI_CHECK].includes(type);
-    const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL, NodeType.LOOP, NodeType.READ_FILE, NodeType.ROUTER].includes(type);
+    const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST, NodeType.AI_DEBATE, NodeType.MULTI_CHECK, NodeType.ARCHITECT].includes(type);
+    const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL, NodeType.LOOP, NodeType.READ_FILE, NodeType.ROUTER, NodeType.GIT_CONTROL].includes(type);
 
     return (
         <div 

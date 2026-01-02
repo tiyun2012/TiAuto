@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Node, NodeType, NodeShape } from '../types';
-import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff, Sparkles, Bot, Zap, Cloud, Server, ThumbsUp, ThumbsDown, CircleDashed, Files, Repeat, FolderOpen, Users, Layers, GitFork, Save } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, AlertCircle, CheckCircle2, StickyNote, Laptop, ListTodo, Binary, Brain, Cpu, Eye, EyeOff, SquareTerminal, FlaskConical, X, FileDiff, Sparkles, Bot, Zap, Cloud, Server, ThumbsUp, ThumbsDown, CircleDashed, Files, Repeat, FolderOpen, Users, Layers, GitFork, Save, GitBranch, Briefcase } from 'lucide-react';
 import { NODE_DIMENSIONS } from '../constants';
 
 interface NodeComponentProps {
@@ -44,8 +44,8 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   let portColor = "bg-blue-500"; 
 
   // Categorize
-  const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST, NodeType.AI_DEBATE, NodeType.MULTI_CHECK].includes(type);
-  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL, NodeType.LOOP, NodeType.READ_FILE, NodeType.ROUTER, NodeType.WRITE_FILE].includes(type);
+  const isAI = [NodeType.GEMINI_GENERATE, NodeType.GEMINI_CHECK, NodeType.SIMULATE_RUN, NodeType.AI_UNIT_TEST, NodeType.AI_DEBATE, NodeType.MULTI_CHECK, NodeType.ARCHITECT].includes(type);
+  const isLogic = [NodeType.TRIGGER, NodeType.PYTHON_EXEC, NodeType.VS_CODE, NodeType.TODO_LIST, NodeType.SHELL_EXEC, NodeType.DIFF, NodeType.APPROVAL, NodeType.LOOP, NodeType.READ_FILE, NodeType.ROUTER, NodeType.WRITE_FILE, NodeType.GIT_CONTROL].includes(type);
   const isNote = type === NodeType.NOTE;
   const hasFiles = data.files && Object.keys(data.files).length > 0;
 
@@ -56,6 +56,13 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       borderClass = "border-green-500";
       titleColor = "text-green-400";
       portColor = "bg-green-500";
+      break;
+    case NodeType.ARCHITECT:
+      Icon = Briefcase;
+      bgClass = "bg-gray-800";
+      borderClass = "border-emerald-300";
+      titleColor = "text-emerald-300";
+      portColor = "bg-emerald-300";
       break;
     case NodeType.READ_FILE:
       Icon = FolderOpen;
@@ -70,6 +77,13 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       borderClass = "border-red-300";
       titleColor = "text-red-300";
       portColor = "bg-red-300";
+      break;
+    case NodeType.GIT_CONTROL:
+      Icon = GitBranch;
+      bgClass = "bg-gray-800";
+      borderClass = "border-orange-300";
+      titleColor = "text-orange-300";
+      portColor = "bg-orange-300";
       break;
     case NodeType.GEMINI_GENERATE:
       Icon = Sparkles; 
@@ -291,6 +305,8 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       if (type === NodeType.READ_FILE) return data.localPath ? `Reading: ${data.localPath}` : "No file loaded.";
       if (type === NodeType.WRITE_FILE) return data.localPath ? `Writing to: ${data.localPath}` : "No path set.";
       if (type === NodeType.ROUTER) return `Logic Result: ${data.output || 'Pending'}`;
+      if (type === NodeType.ARCHITECT) return data.output ? "Plan generated." : "Planning...";
+      if (type === NodeType.GIT_CONTROL) return `Git ${data.gitCommand || 'status'}`;
       if (data.output) return data.output;
       return data.prompt || "No details.";
   };
