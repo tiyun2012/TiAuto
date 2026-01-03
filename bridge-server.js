@@ -10,8 +10,8 @@ const PORT = 3001;
 
 // --- CONFIGURATION ---
 // We set your Engine Path here.
-// You can change this string later if you move your project.
-const PROJECT_ROOT = process.env.PROJECT_ROOT || "D:\\Dev\\ti3D_main\\ti3D_new-main";
+// You can change this string via POST /api/config or by editing this file.
+let PROJECT_ROOT = process.env.PROJECT_ROOT || "D:\\Dev\\ti3D_main\\ti3D_new-main";
 
 // Middleware
 app.use(cors()); // Allow frontend (localhost:3002) to call this
@@ -29,7 +29,26 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', mode: 'local-bridge', root: PROJECT_ROOT });
 });
 
-// 2. Execute Shell Commands
+// 2. Configure Root Path (New)
+app.post('/api/config', async (req, res) => {
+    const { projectRoot } = req.body;
+    if (projectRoot) {
+        // Verify path exists
+        try {
+            await fs.access(projectRoot);
+            PROJECT_ROOT = path.normalize(projectRoot); // Update global
+            console.log(`[CONFIG] Project Root changed to: ${PROJECT_ROOT}`);
+            res.json({ success: true, root: PROJECT_ROOT });
+        } catch(e) {
+            console.error(`[CONFIG ERROR] Path invalid: ${projectRoot}`);
+            res.status(400).json({ error: "Path does not exist or is not accessible." });
+        }
+    } else {
+        res.status(400).json({ error: "Missing 'projectRoot' parameter" });
+    }
+});
+
+// 3. Execute Shell Commands
 app.post('/api/execute', async (req, res) => {
     const { command, cwd } = req.body;
     
@@ -56,7 +75,7 @@ app.post('/api/execute', async (req, res) => {
     });
 });
 
-// 3. Read File
+// 4. Read File
 app.post('/api/read', async (req, res) => {
     const { path: filePath } = req.body;
     
@@ -73,7 +92,7 @@ app.post('/api/read', async (req, res) => {
     }
 });
 
-// 4. Write File
+// 5. Write File
 app.post('/api/write', async (req, res) => {
     const { path: filePath, content } = req.body;
 
@@ -96,7 +115,7 @@ app.post('/api/write', async (req, res) => {
     }
 });
 
-// 5. List Files (Project Indexing)
+// 6. List Files (Project Indexing)
 app.post('/api/list', async (req, res) => {
     const { path: dirPath } = req.body;
     // Default to PROJECT_ROOT if '.' or empty string is passed

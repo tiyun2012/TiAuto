@@ -128,6 +128,7 @@ export interface AISettings {
   // Local Bridge Settings
   localBridgeEnabled: boolean;
   localBridgeUrl: string;
+  localProjectPath: string; // New: Stores the active project root
 }
 
 export const INITIAL_NODES: Node[] = [
@@ -154,7 +155,7 @@ export const INITIAL_NODES: Node[] = [
     position: { x: 600, y: 200 },
     data: { 
       label: 'Security Audit', 
-      shape: 'square',
+      shape: 'square', 
       prompt: 'Analyze the code for any infinite loops or security issues.',
       status: 'idle' 
     }

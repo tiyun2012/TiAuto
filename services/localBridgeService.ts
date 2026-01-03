@@ -1,4 +1,5 @@
 
+
 import { AISettings } from "../types";
 
 /**
@@ -12,6 +13,7 @@ import { AISettings } from "../types";
  * POST /api/read { path: string } -> { content: string }
  * POST /api/write { path: string, content: string } -> { success: boolean }
  * POST /api/list { path: string } -> { files: string[] }
+ * POST /api/config { projectRoot: string } -> { success: boolean, root: string }
  */
 
 export const checkBridgeHealth = async (url: string): Promise<boolean> => {
@@ -23,6 +25,25 @@ export const checkBridgeHealth = async (url: string): Promise<boolean> => {
         return res.ok;
     } catch (e) {
         return false;
+    }
+};
+
+export const bridgeSetRoot = async (path: string, settings: AISettings): Promise<string> => {
+    if (!settings.localBridgeEnabled) throw new Error("Local Bridge is disabled in settings.");
+    
+    try {
+        const res = await fetch(`${settings.localBridgeUrl}/api/config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectRoot: path })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        
+        return data.root;
+    } catch (e: any) {
+        throw new Error(`Failed to set Project Root: ${e.message}`);
     }
 };
 
