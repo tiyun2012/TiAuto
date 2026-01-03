@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const { exec } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
 
 const app = express();
 const PORT = 3001;
@@ -115,7 +116,7 @@ app.post('/api/write', async (req, res) => {
     }
 });
 
-// 6. List Files (Project Indexing)
+// 6. List Files (Project Indexing - Recursive)
 app.post('/api/list', async (req, res) => {
     const { path: dirPath } = req.body;
     // Default to PROJECT_ROOT if '.' or empty string is passed
@@ -132,6 +133,41 @@ app.post('/api/list', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// 7. Browse Directory (Navigation - Non-Recursive)
+app.post('/api/browse', async (req, res) => {
+    let { targetPath } = req.body;
+    
+    // If no path provided, try to guess home or root
+    if (!targetPath || targetPath === '.') targetPath = PROJECT_ROOT;
+    
+    // Normalize
+    const browsePath = path.normalize(targetPath);
+
+    console.log(`[BROWSE] ${browsePath}`);
+
+    try {
+        const dirents = await fs.readdir(browsePath, { withFileTypes: true });
+        
+        const folders = dirents
+            .filter(d => d.isDirectory())
+            .map(d => d.name);
+            
+        // Get parent directory
+        const parent = path.dirname(browsePath);
+
+        res.json({
+            current: browsePath,
+            parent: parent === browsePath ? null : parent, // If root, parent is null-ish
+            folders: folders,
+            separator: path.sep
+        });
+    } catch (error) {
+        console.error(`[BROWSE ERROR] ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 
 // Helper for recursive file listing
 async function getFiles(dir) {

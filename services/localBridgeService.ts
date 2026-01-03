@@ -14,6 +14,7 @@ import { AISettings } from "../types";
  * POST /api/write { path: string, content: string } -> { success: boolean }
  * POST /api/list { path: string } -> { files: string[] }
  * POST /api/config { projectRoot: string } -> { success: boolean, root: string }
+ * POST /api/browse { targetPath: string } -> { current: string, parent: string, folders: string[] }
  */
 
 export const checkBridgeHealth = async (url: string): Promise<boolean> => {
@@ -129,5 +130,33 @@ export const bridgeListFiles = async (path: string, settings: AISettings): Promi
         return Array.isArray(data.files) ? data.files : [];
     } catch (e: any) {
         throw new Error(`Local Bridge List Failed: ${e.message}`);
+    }
+};
+
+export interface BrowserData {
+    current: string;
+    parent: string | null;
+    folders: string[];
+    separator: string;
+}
+
+export const bridgeBrowse = async (path: string, settings: AISettings): Promise<BrowserData> => {
+    if (!settings.localBridgeEnabled) throw new Error("Local Bridge is disabled.");
+    
+    try {
+        const res = await fetch(`${settings.localBridgeUrl}/api/browse`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetPath: path })
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || res.statusText);
+        }
+        
+        return await res.json();
+    } catch (e: any) {
+        throw new Error(`Browse Failed: ${e.message}`);
     }
 };
