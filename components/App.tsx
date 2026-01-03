@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Canvas from './components/Canvas';
 import Sidebar from './components/Sidebar';
@@ -8,7 +7,9 @@ import { Node, Edge, INITIAL_NODES, INITIAL_EDGES, NodeType, AISettings, AIProvi
 import { executeNode } from './services/workflowEngine';
 import { refineCode } from './services/geminiService';
 import { parseOutputToFiles } from './services/fileParsingService';
-import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson, Settings, Key, Server, Link, Network } from 'lucide-react';
+// IMPORT THE NEW SERVICE FUNCTION
+import { bridgeSetRoot } from './services/localBridgeService'; 
+import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson, Settings, Key, Server, Link, Network, Square, Play, ScrollText, ChevronUp, ChevronDown } from 'lucide-react';
 import { APP_TEMPLATES, Template } from './data/templates';
 
 export default function App() {
@@ -21,6 +22,11 @@ export default function App() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showJsonView, setShowJsonView] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  // New: Logs & Safety
+  const [logs, setLogs] = useState<string[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
+  const abortRef = useRef(false);
 
   // Reference to nodes state for async access in loops
   const nodesRef = useRef(nodes);
@@ -44,7 +50,9 @@ export default function App() {
       openaiModel: 'gpt-4o',
 
       localBridgeEnabled: false,
-      localBridgeUrl: 'http://localhost:3001'
+      localBridgeUrl: 'http://localhost:3001',
+      // INITIALIZE THE PATH (Matches your default in server.js)
+      localProjectPath: "D:\\Dev\\ti3D_main\\ti3D_new-main" 
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +140,7 @@ export default function App() {
       setEdges([]);
       setSelectedNodeId(null);
       setToast({ message: "Canvas cleared.", type: 'info' });
+      setLogs([]);
     }
   };
   
@@ -140,6 +149,7 @@ export default function App() {
           setNodes(template.nodes);
           setEdges(template.edges);
           setShowTemplates(false);
+          setLogs([]);
           setToast({ message: `Loaded ${template.name}`, type: 'success' });
       }
   };
@@ -163,6 +173,26 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [toast]);
+
+  // Logging Helper
+  const addLog = (message: string) => {
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+      setLogs(prev => [`[${time}] ${message}`, ...prev]);
+  };
+
+  // --- NEW: Handle Setting Project Root ---
+  const handleSetRoot = async () => {
+      if (!aiSettings.localBridgeUrl || !aiSettings.localProjectPath) return;
+      try {
+          // Call the service function we imported
+          await bridgeSetRoot(aiSettings.localProjectPath, aiSettings);
+          setToast({ message: "Project Root Updated!", type: 'success' });
+          addLog(`Bridge Config: Root set to ${aiSettings.localProjectPath}`);
+      } catch (e: any) {
+          setToast({ message: "Failed to set root: " + e.message, type: 'error' });
+          addLog(`Error setting root: ${e.message}`);
+      }
+  };
 
   // Node Actions
   const handleAddNode = (type: NodeType, position?: { x: number; y: number }) => {
@@ -195,6 +225,7 @@ export default function App() {
     };
     setNodes(prev => [...prev, newNode]);
     setSelectedNodeId(id);
+    addLog(`Added node: ${newNode.data.label}`);
   };
 
   const handleUpdateNode = (id: string, data: any) => {
@@ -205,6 +236,7 @@ export default function App() {
     setNodes(nodes.filter(n => n.id !== id));
     setEdges(edges.filter(e => e.source !== id && e.target !== id));
     if (selectedNodeId === id) setSelectedNodeId(null);
+    addLog(`Deleted node ${id}`);
   };
 
   const handleDeleteEdge = (id: string) => {
@@ -215,6 +247,7 @@ export default function App() {
       const node = nodes.find(n => n.id === id);
       if (!node || !node.data.output) return;
       setToast({ message: "Refining code...", type: 'info' });
+      addLog(`Refining node: ${node.data.label}`);
       try {
         handleUpdateNode(id, { status: 'running' });
         // Pass provider overrides
@@ -226,9 +259,11 @@ export default function App() {
             files: Object.keys(extractedFiles).length > 0 ? extractedFiles : undefined
         });
         setToast({ message: "Refined successfully.", type: 'success' });
+        addLog(`Refinement complete for ${node.data.label}`);
       } catch (error: any) {
         setToast({ message: "Refine failed: " + error.message, type: 'error' });
         handleUpdateNode(id, { status: 'error', errorMessage: error.message });
+        addLog(`Refinement failed: ${error.message}`);
       }
   };
 
@@ -259,6 +294,7 @@ export default function App() {
     setEdges(prev => [...prev, newEdge]);
     setSelectedNodeId(fixNodeId);
     setToast({ message: "Created Auto-Fix Node", type: "success" });
+    addLog(`Created Auto-Fix node from ${checkNode.data.label}`);
   };
 
   const getDownstreamNodes = (nodeId: string, currentNodes: Node[], currentEdges: Edge[]) => {
@@ -291,10 +327,16 @@ export default function App() {
       const executed = new Set<string>();
       
       while (queue.length > 0) {
+        // Safety Check 1: Stop if user aborted
+        if (abortRef.current) return;
+
         const currentNodeRef = queue.shift()!;
         const currentNode = currentNodes.find(n => n.id === currentNodeRef.id);
         if (!currentNode) continue;
         
+        // Visual Tracking
+        setSelectedNodeId(currentNode.id);
+
         // If node already successfully executed this run, skip re-execution but check children
         if (executed.has(currentNode.id) || currentNode.data.status === 'success') {
              const childrenEdges = edges.filter(e => e.source === currentNode.id);
@@ -316,6 +358,7 @@ export default function App() {
         if (!allParentsReady && parents.length > 0) continue;
 
         try {
+            addLog(`Executing: ${currentNode.data.label}`);
             await executeNode(currentNode, currentNodes, edges, aiSettings, (id, data) => {
                 // Update local loop state
                 currentNodes = currentNodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n);
@@ -324,7 +367,8 @@ export default function App() {
             });
         } catch (error: any) {
              if (error.message === "LOOP_TRIGGERED") {
-                 setToast({ message: "Loop Triggered: Issues found, rewinding...", type: 'info' });
+                 setToast({ message: "Loop Triggered: Rewinding...", type: 'info' });
+                 addLog(`Loop Triggered by ${currentNode.data.label}. Rewinding flow.`);
                  const idleNodes = currentNodes.filter(n => n.data.status === 'idle');
                  idleNodes.forEach(n => {
                      if (!queue.find(q => q.id === n.id)) {
@@ -337,6 +381,7 @@ export default function App() {
              }
              if (error.message === "WAIT_FOR_APPROVAL") {
                  setToast({ message: "Workflow Paused for Approval", type: 'info' });
+                 addLog(`Paused for Approval at ${currentNode.data.label}`);
                  break; 
              }
              throw error;
@@ -348,6 +393,7 @@ export default function App() {
         if (executedNode?.data.status === 'success') {
             executed.add(currentNode.id);
             visited.add(currentNode.id);
+            addLog(`Success: ${currentNode.data.label}`);
 
             const childrenEdges = edges.filter(e => e.source === currentNode.id);
             childrenEdges.forEach(e => {
@@ -358,14 +404,33 @@ export default function App() {
             });
         }
         
-        await new Promise(r => setTimeout(r, 600));
+        // Increased wait time to 4000ms to respect Free Tier limits
+        await new Promise(r => setTimeout(r, 4000));
       }
+  };
+
+  const handleStop = () => {
+      abortRef.current = true;
+      setToast({ message: "Stopping workflow...", type: 'info' });
+      addLog("User initiated Emergency Stop.");
   };
 
   const handleRunWorkflow = async (resume = false) => {
     if (isExecuting) return;
+    
+    // Reset Abort Flag
+    abortRef.current = false;
+    
     setToast({ message: resume ? "Resuming Workflow..." : "Workflow Started...", type: "info" });
+    if(!resume) {
+        setLogs([]);
+        addLog("Workflow initialized.");
+    } else {
+        addLog("Workflow resumed.");
+    }
+
     setIsExecuting(true);
+    setShowLogs(true); // Auto-open logs
     
     // 1. Reset State (if not resuming)
     if (!resume) {
@@ -373,7 +438,7 @@ export default function App() {
             ...n, 
             data: { 
                 ...n.data, 
-                status: 'idle', 
+                status: 'idle' as const, 
                 errorMessage: undefined, 
                 currentIteration: 0, 
                 feedback: undefined,
@@ -394,6 +459,13 @@ export default function App() {
             const MAX_CYCLES = 50; // Safety limit
 
             while (!flowComplete && cycleCount < MAX_CYCLES) {
+                // Safety Check 2: Stop if user aborted
+                if (abortRef.current) {
+                    setToast({ message: "Workflow stopped by user.", type: 'info' });
+                    addLog("Workflow stopped.");
+                    break;
+                }
+
                 cycleCount++;
                 
                 // Fetch fresh state from ref at start of loop
@@ -412,7 +484,7 @@ export default function App() {
                         
                         // Reset downstream + iterator itself to idle
                         if (downstreamIds.has(n.id) || n.id === activeIteratorId) {
-                            return { ...n, data: { ...n.data, status: 'idle', output: undefined, files: undefined } };
+                            return { ...n, data: { ...n.data, status: 'idle' as const, output: undefined, files: undefined } };
                         }
                         return n;
                     }));
@@ -445,18 +517,28 @@ export default function App() {
                 if (iterator && !iterator.data.iteratorFinished && iterator.data.status === 'success') {
                     activeIteratorId = iterator.id;
                     setToast({ message: `Cycle ${iterator.data.iteratorIndex} / ${iterator.data.iteratorTotal || '?'}: Processing...`, type: 'info' });
+                    addLog(`Iterator Cycle ${iterator.data.iteratorIndex} starting...`);
                     // Loop continues...
                 } else {
                     flowComplete = true;
                 }
             }
             
-            if (cycleCount >= MAX_CYCLES) setToast({ message: "Max cycles reached.", type: 'error' });
-            else setToast({ message: "Workflow Completed.", type: "success" });
+            if (abortRef.current) {
+                // Already handled
+            } else if (cycleCount >= MAX_CYCLES) {
+                setToast({ message: "Max cycles reached.", type: 'error' });
+                addLog("Error: Max cycles limit reached.");
+            }
+            else {
+                setToast({ message: "Workflow Completed.", type: "success" });
+                addLog("Workflow completed successfully.");
+            }
 
         } catch (error: any) {
             if (error.message !== "WAIT_FOR_APPROVAL") {
                  setToast({ message: error.message, type: "error" });
+                 addLog(`Workflow Error: ${error.message}`);
             }
         } finally {
             setIsExecuting(false);
@@ -473,16 +555,18 @@ export default function App() {
                setTimeout(() => handleRunWorkflow(true), 100);
           } else {
                handleUpdateNode(nodeId, { status: 'error', errorMessage: 'Rejected by User' });
+               addLog(`Approval Node ${nodeId} rejected by user.`);
           }
           return;
       }
 
       if (isExecuting) return;
       setToast({ message: "Executing node...", type: "info" });
+      addLog(`Manual execution: Node ${nodeId}`);
       setIsExecuting(true);
       try {
           // Reset just this node
-          setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status: 'idle', errorMessage: undefined } } : n));
+          setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status: 'idle' as const, errorMessage: undefined } } : n));
           const targetNode = nodes.find(n => n.id === nodeId);
           if (!targetNode) throw new Error("Node not found");
           
@@ -491,14 +575,28 @@ export default function App() {
                setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n));
           });
           setToast({ message: "Node Executed.", type: "success" });
+          addLog(`Node ${nodeId} execution success.`);
       } catch (error: any) {
           if(error.message === "LOOP_TRIGGERED") {
               setToast({ message: "Loop triggered. Run Full Workflow to process loops.", type: "info" });
           } else if (error.message !== "WAIT_FOR_APPROVAL") {
               setToast({ message: error.message, type: "error" });
+              addLog(`Node ${nodeId} error: ${error.message}`);
           }
       } finally {
           setIsExecuting(false);
+      }
+  };
+  
+  const handleSetBridgeRoot = async () => {
+      try {
+          setToast({ message: "Updating Bridge Root...", type: "info" });
+          const newRoot = await bridgeSetRoot(aiSettings.localProjectPath, aiSettings);
+          setToast({ message: `Success: Bridge Root set to ${newRoot}`, type: "success" });
+          addLog(`Bridge root updated to: ${newRoot}`);
+      } catch (error: any) {
+          setToast({ message: `Error setting root: ${error.message}`, type: "error" });
+          addLog(`Failed to set bridge root: ${error.message}`);
       }
   };
 
@@ -517,9 +615,30 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-3">
+                {/* Run / Stop Controls in Header */}
+                <div className="mr-4 flex items-center gap-2">
+                    {!isExecuting ? (
+                        <button 
+                            onClick={() => handleRunWorkflow(false)}
+                            className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors shadow-lg shadow-green-900/20"
+                        >
+                            <Play className="w-3 h-3 fill-current" /> Run Workflow
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={handleStop}
+                            className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors shadow-lg shadow-red-900/20 animate-pulse"
+                        >
+                            <Square className="w-3 h-3 fill-current" /> Emergency Stop
+                        </button>
+                    )}
+                </div>
+
+                <div className="h-6 w-px bg-gray-800 mx-1"></div>
+
                 <button 
                   onClick={() => setShowTemplates(true)}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-xs font-medium transition-colors mr-2"
+                  className="flex items-center gap-2 hover:bg-gray-800 px-3 py-1.5 rounded text-xs font-medium text-gray-400 hover:text-white transition-colors"
                 >
                     <LayoutTemplate className="w-3.5 h-3.5" />
                     Templates
@@ -540,9 +659,6 @@ export default function App() {
                   </button>
                 </div>
                 
-                {/* Visual Separator */}
-                <div className="h-6 w-px bg-gray-800 mx-1"></div>
-
                 {/* Enhanced Provider Status Button */}
                 <button 
                     onClick={() => setShowSettings(true)}
@@ -589,11 +705,47 @@ export default function App() {
                     </div>
                 )}
             </div>
-            <div className="h-8 bg-gray-900 border-t border-gray-800 flex items-center px-4 gap-6 text-[11px] text-gray-500 select-none z-30 shrink-0">
-                <div className="flex items-center gap-1.5"><MousePointer2 className="w-3 h-3 opacity-70" /><span>Select Node</span></div>
-                 <div className="flex items-center gap-1.5"><Move className="w-3 h-3 opacity-70" /><span>Pan: Shift + Drag</span></div>
-                 <div className="flex items-center gap-1.5"><ZoomIn className="w-3 h-3 opacity-70" /><span>Zoom: Wheel</span></div>
-                <div className="ml-auto text-gray-600">{isLoaded ? 'Auto-save enabled' : 'Loading...'}</div>
+            
+            {/* Logs Drawer */}
+            {showLogs && (
+                <div className="h-48 bg-gray-900 border-t border-gray-800 flex flex-col animate-in slide-in-from-bottom-5">
+                    <div className="px-4 py-1.5 bg-gray-850 border-b border-gray-800 flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                            <ScrollText className="w-3 h-3" /> Execution History
+                        </span>
+                        <button onClick={() => setShowLogs(false)} className="text-gray-500 hover:text-white">
+                            <ChevronDown className="w-3 h-3" />
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 font-mono text-xs space-y-1">
+                        {logs.length === 0 && <div className="text-gray-600 italic px-2">Ready to run.</div>}
+                        {logs.map((log, i) => (
+                            <div key={i} className="text-gray-300 border-b border-gray-800/50 pb-0.5 mb-0.5 last:border-0">
+                                {log}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Bottom Status Bar */}
+            <div className="h-8 bg-gray-900 border-t border-gray-800 flex items-center px-4 gap-6 text-[11px] text-gray-500 select-none z-30 shrink-0 justify-between">
+                <div className="flex gap-6">
+                    <div className="flex items-center gap-1.5"><MousePointer2 className="w-3 h-3 opacity-70" /><span>Select Node</span></div>
+                    <div className="flex items-center gap-1.5"><Move className="w-3 h-3 opacity-70" /><span>Pan: Shift + Drag</span></div>
+                    <div className="flex items-center gap-1.5"><ZoomIn className="w-3 h-3 opacity-70" /><span>Zoom: Wheel</span></div>
+                </div>
+                
+                <div className="flex items-center gap-4">
+                    <button 
+                        onClick={() => setShowLogs(!showLogs)} 
+                        className={`flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-gray-800 transition-colors ${showLogs ? 'text-blue-400 bg-gray-800' : 'text-gray-500'}`}
+                    >
+                        {showLogs ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+                        <span>Logs</span>
+                    </button>
+                    <div>{isLoaded ? 'Auto-save enabled' : 'Loading...'}</div>
+                </div>
             </div>
         </div>
 
@@ -658,23 +810,51 @@ export default function App() {
                             <h3 className="font-medium text-white flex items-center gap-2"><Network className="w-4 h-4 text-indigo-400" /> Local Bridge (Game Engine Mode)</h3>
                             <p className="text-xs text-gray-400">Enables Read/Write/Run on your local machine via a local server.</p>
                             
-                            <div className="flex items-center gap-3">
-                                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                            <div className="flex flex-col gap-4 mt-2">
+                                {/* Enable / Disable */}
+                                <div className="flex items-center gap-3">
+                                    <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={aiSettings.localBridgeEnabled} 
+                                            onChange={(e) => setAiSettings(s => ({...s, localBridgeEnabled: e.target.checked}))}
+                                            className="rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500/20"
+                                        />
+                                        Enable Bridge
+                                    </label>
                                     <input 
-                                        type="checkbox" 
-                                        checked={aiSettings.localBridgeEnabled} 
-                                        onChange={(e) => setAiSettings(s => ({...s, localBridgeEnabled: e.target.checked}))}
-                                        className="rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500/20"
+                                        type="text" 
+                                        value={aiSettings.localBridgeUrl} 
+                                        onChange={(e) => setAiSettings(s => ({...s, localBridgeUrl: e.target.value}))} 
+                                        className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm" 
+                                        placeholder="http://localhost:3001" 
                                     />
-                                    Enable Bridge
-                                </label>
-                                <input 
-                                    type="text" 
-                                    value={aiSettings.localBridgeUrl} 
-                                    onChange={(e) => setAiSettings(s => ({...s, localBridgeUrl: e.target.value}))} 
-                                    className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm" 
-                                    placeholder="http://localhost:3000" 
-                                />
+                                </div>
+
+                                {/* Project Path Config */}
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Host Project Path (Root)</label>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            type="text" 
+                                            value={aiSettings.localProjectPath} 
+                                            onChange={(e) => setAiSettings(s => ({...s, localProjectPath: e.target.value}))} 
+                                            className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm font-mono text-gray-300" 
+                                            placeholder="D:\Dev\MyProject" 
+                                        />
+                                        <button 
+                                            onClick={handleSetBridgeRoot}
+                                            disabled={!aiSettings.localBridgeEnabled}
+                                            className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white px-3 py-2 rounded text-xs font-bold whitespace-nowrap"
+                                        >
+                                            Set Root
+                                        </button>
+                                    </div>
+                                    <p className="text-[10px] text-gray-500">
+                                        Click "Set Root" to update the Bridge Server's working directory. 
+                                        This fixes "not a git repository" errors.
+                                    </p>
+                                </div>
                             </div>
                         </div>
 

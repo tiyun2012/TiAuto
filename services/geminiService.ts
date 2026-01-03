@@ -1,8 +1,9 @@
-
-
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import OpenAI from "openai";
 import { AISettings, AIProvider } from "../types";
+
+// --- HELPERS ---
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // --- INTERFACES & FACTORY ---
 
@@ -48,27 +49,55 @@ class GeminiStrategy implements AIProviderStrategy {
             config.tools = params.tools;
         }
 
-        const response = await this.client.models.generateContent({
-            model: model,
-            contents: params.prompt,
-            config: config
-        });
+        // Retry Loop for Rate Limiting (429)
+        let attempts = 0;
+        const maxAttempts = 3;
 
-        // Extract grounding
-        const sources: any[] = [];
-        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-        if (chunks) {
-            chunks.forEach((chunk: any) => {
-                if (chunk.web?.uri && chunk.web?.title) {
-                    sources.push({ title: chunk.web.title, uri: chunk.web.uri });
+        while (attempts < maxAttempts) {
+            try {
+                const response = await this.client.models.generateContent({
+                    model: model,
+                    contents: params.prompt,
+                    config: config
+                });
+
+                // Extract grounding
+                const sources: any[] = [];
+                const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+                if (chunks) {
+                    chunks.forEach((chunk: any) => {
+                        if (chunk.web?.uri && chunk.web?.title) {
+                            sources.push({ title: chunk.web.title, uri: chunk.web.uri });
+                        }
+                    });
                 }
-            });
-        }
 
-        return { 
-            text: response.text || "No response.",
-            groundingSources: sources.length > 0 ? sources : undefined
-        };
+                return { 
+                    text: response.text || "No response.",
+                    groundingSources: sources.length > 0 ? sources : undefined
+                };
+
+            } catch (error: any) {
+                attempts++;
+                const errMsg = error.message?.toLowerCase() || '';
+                const status = error.status || 0;
+
+                // Check for Quota/Rate Limit Errors
+                if (errMsg.includes('429') || status === 429 || errMsg.includes('quota') || errMsg.includes('resource exhausted')) {
+                    if (attempts >= maxAttempts) throw new Error(`Gemini Rate Limit (429) hit. Max retries exceeded.`);
+                    
+                    console.warn(`[Gemini] Rate Limit hit. Waiting ~15s... (Attempt ${attempts}/${maxAttempts})`);
+                    // Wait 15s + jitter
+                    await delay(15000 + Math.random() * 2000);
+                    continue; // Retry loop
+                }
+
+                // If regular error, throw immediately
+                throw error;
+            }
+        }
+        
+        throw new Error("Unexpected loop exit in Gemini Strategy.");
     }
 }
 
