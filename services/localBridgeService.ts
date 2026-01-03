@@ -1,5 +1,3 @@
-
-
 import { AISettings } from "../types";
 
 /**
@@ -17,120 +15,110 @@ import { AISettings } from "../types";
  * POST /api/browse { targetPath: string } -> { current: string, parent: string, folders: string[] }
  */
 
-export const checkBridgeHealth = async (url: string): Promise<boolean> => {
+const detectMixedContentError = (url: string) => {
+    const isAppSecure = window.location.protocol === 'https:';
+    const isTargetLocal = url.includes('localhost') || url.includes('127.0.0.1');
+    const isTargetInsecure = url.startsWith('http:');
+    
+    // Check if we are likely in Project IDX or a Cloud IDE
+    const isCloudEnv = window.location.hostname.includes('googleusercontent') || 
+                       window.location.hostname.includes('github') || 
+                       window.location.hostname.includes('gitpod');
+
+    if (isAppSecure && isTargetLocal && isTargetInsecure) {
+        let msg = `\n\n[CONNECTION BLOCKED] Browser Security Rule`;
+        msg += `\nYou are viewing this app via HTTPS (${window.location.hostname}), but trying to reach insecure 'localhost'.`;
+        
+        if (isCloudEnv) {
+             msg += `\n\n[VS CODE / PROJECT IDX DETECTED]`;
+             msg += `\n1. Open the 'Ports' tab (bottom panel) in your editor.`;
+             msg += `\n2. Find Port 3001.`;
+             msg += `\n3. Copy the 'Forwarded Address' (it starts with https://).`;
+             msg += `\n4. Paste it into Settings -> Local Bridge URL.`;
+        } else {
+             msg += `\n\nFIX: Please update Settings -> Local Bridge URL to use the secure public URL for your backend, or run the frontend on http://localhost.`;
+        }
+        return msg;
+    }
+    return "";
+};
+
+// Helper to handle fetch errors consistently
+const handleBridgeRequest = async (url: string, body: any, errorMessage: string) => {
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        return data;
+    } catch (e: any) {
+        let hint = "";
+        
+        if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError') || e.message.includes('Connection refused')) {
+             hint = detectMixedContentError(url);
+             if (!hint) hint = `\nIs 'npm run bridge' running? Checked: ${url}`;
+             throw new Error(`Bridge Unreachable.${hint}`);
+        }
+        throw new Error(`${errorMessage}: ${e.message}`);
+    }
+};
+
+const checkEnabled = (settings: AISettings) => {
+    if (!settings.localBridgeEnabled) {
+        throw new Error("Local Bridge is disabled. Please enable it in Settings -> Local Bridge.");
+    }
+};
+
+export const checkBridgeHealth = async (baseUrl: string): Promise<boolean> => {
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1000);
-        const res = await fetch(`${url}/health`, { signal: controller.signal });
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const res = await fetch(`${baseUrl}/health`, { signal: controller.signal });
         clearTimeout(timeoutId);
         return res.ok;
-    } catch (e) {
+    } catch (e: any) {
+        console.warn("Bridge Health Check Failed:", e.message);
         return false;
     }
 };
 
 export const bridgeSetRoot = async (path: string, settings: AISettings): Promise<string> => {
-    if (!settings.localBridgeEnabled) throw new Error("Local Bridge is disabled in settings.");
-    
-    try {
-        const res = await fetch(`${settings.localBridgeUrl}/api/config`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ projectRoot: path })
-        });
-        
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || res.statusText);
-        
-        return data.root;
-    } catch (e: any) {
-        throw new Error(`Failed to set Project Root: ${e.message}`);
-    }
+    checkEnabled(settings);
+    const data = await handleBridgeRequest(`${settings.localBridgeUrl}/api/config`, { projectRoot: path }, "Failed to set Root");
+    return data.root;
 };
 
 export const bridgeExecute = async (command: string, settings: AISettings): Promise<string> => {
-    if (!settings.localBridgeEnabled) throw new Error("Local Bridge is disabled in settings.");
+    checkEnabled(settings);
+    const data = await handleBridgeRequest(`${settings.localBridgeUrl}/api/execute`, { command }, "Bridge Execution Failed");
     
-    try {
-        const res = await fetch(`${settings.localBridgeUrl}/api/execute`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command })
-        });
-        
-        if (!res.ok) throw new Error(`Bridge Error: ${res.statusText}`);
-        
-        const data = await res.json();
-        // Combine stdout and stderr for the logs
-        let output = data.stdout || "";
-        if (data.stderr) output += `\n[STDERR]\n${data.stderr}`;
-        
-        if (data.error) throw new Error(data.error);
-        
-        return output || "(No Output)";
-    } catch (e: any) {
-        throw new Error(`Local Bridge Connection Failed: ${e.message}. Is your local server running at ${settings.localBridgeUrl}?`);
-    }
+    // Combine stdout and stderr for the logs
+    let output = data.stdout || "";
+    if (data.stderr) output += `\n[STDERR]\n${data.stderr}`;
+    
+    return output || "(No Output)";
 };
 
 export const bridgeReadFile = async (path: string, settings: AISettings): Promise<string> => {
-    if (!settings.localBridgeEnabled) throw new Error("Local Bridge is disabled in settings.");
-
-    try {
-        const res = await fetch(`${settings.localBridgeUrl}/api/read`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path })
-        });
-
-        if (!res.ok) throw new Error(`Bridge Read Error: ${res.statusText}`);
-        const data = await res.json();
-        
-        if (data.error) throw new Error(data.error);
-        return data.content;
-    } catch (e: any) {
-        throw new Error(`Local Bridge Read Failed: ${e.message}`);
-    }
+    checkEnabled(settings);
+    const data = await handleBridgeRequest(`${settings.localBridgeUrl}/api/read`, { path }, "Bridge Read Failed");
+    return data.content;
 };
 
 export const bridgeWriteFile = async (path: string, content: string, settings: AISettings): Promise<string> => {
-    if (!settings.localBridgeEnabled) throw new Error("Local Bridge is disabled in settings.");
-
-    try {
-        const res = await fetch(`${settings.localBridgeUrl}/api/write`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path, content })
-        });
-
-        if (!res.ok) throw new Error(`Bridge Write Error: ${res.statusText}`);
-        const data = await res.json();
-        
-        if (data.error) throw new Error(data.error);
-        return `Successfully wrote to ${path}`;
-    } catch (e: any) {
-        throw new Error(`Local Bridge Write Failed: ${e.message}`);
-    }
+    checkEnabled(settings);
+    await handleBridgeRequest(`${settings.localBridgeUrl}/api/write`, { path, content }, "Bridge Write Failed");
+    return `Successfully wrote to ${path}`;
 };
 
 export const bridgeListFiles = async (path: string, settings: AISettings): Promise<string[]> => {
-    if (!settings.localBridgeEnabled) throw new Error("Local Bridge is disabled in settings.");
-
-    try {
-        const res = await fetch(`${settings.localBridgeUrl}/api/list`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: path || '.' })
-        });
-
-        if (!res.ok) throw new Error(`Bridge List Error: ${res.statusText}`);
-        const data = await res.json();
-        
-        if (data.error) throw new Error(data.error);
-        return Array.isArray(data.files) ? data.files : [];
-    } catch (e: any) {
-        throw new Error(`Local Bridge List Failed: ${e.message}`);
-    }
+    checkEnabled(settings);
+    const data = await handleBridgeRequest(`${settings.localBridgeUrl}/api/list`, { path: path || '.' }, "Bridge List Failed");
+    return Array.isArray(data.files) ? data.files : [];
 };
 
 export interface BrowserData {
@@ -141,22 +129,6 @@ export interface BrowserData {
 }
 
 export const bridgeBrowse = async (path: string, settings: AISettings): Promise<BrowserData> => {
-    if (!settings.localBridgeEnabled) throw new Error("Local Bridge is disabled.");
-    
-    try {
-        const res = await fetch(`${settings.localBridgeUrl}/api/browse`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ targetPath: path })
-        });
-
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || res.statusText);
-        }
-        
-        return await res.json();
-    } catch (e: any) {
-        throw new Error(`Browse Failed: ${e.message}`);
-    }
+    checkEnabled(settings);
+    return await handleBridgeRequest(`${settings.localBridgeUrl}/api/browse`, { targetPath: path }, "Browse Failed");
 };

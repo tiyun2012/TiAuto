@@ -8,8 +8,8 @@ import { Node, Edge, INITIAL_NODES, INITIAL_EDGES, NodeType, AISettings, AIProvi
 import { executeNode } from './services/workflowEngine';
 import { refineCode } from './services/geminiService';
 import { parseOutputToFiles } from './services/fileParsingService';
-import { bridgeSetRoot } from './services/localBridgeService'; 
-import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson, Settings, Key, Server, Link, Network, Square, Play, ScrollText, ChevronUp, ChevronDown } from 'lucide-react';
+import { bridgeSetRoot, checkBridgeHealth } from './services/localBridgeService'; 
+import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson, Settings, Key, Server, Link, Network, Square, Play, ScrollText, ChevronUp, ChevronDown, Wifi, WifiOff, HelpCircle } from 'lucide-react';
 import { APP_TEMPLATES, Template } from './data/templates';
 
 export default function App() {
@@ -25,6 +25,9 @@ export default function App() {
   
   // NEW STATE FOR FILE BROWSER
   const [showFileBrowser, setShowFileBrowser] = useState(false);
+  
+  // Bridge Health State
+  const [bridgeStatus, setBridgeStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown');
 
   // New: Logs & Safety
   const [logs, setLogs] = useState<string[]>([]);
@@ -97,8 +100,27 @@ export default function App() {
   useEffect(() => {
       if(isLoaded) {
           localStorage.setItem('flowgen-ai-settings-v2', JSON.stringify(aiSettings));
+          // If enabled, check health immediately
+          if (aiSettings.localBridgeEnabled) checkBridge();
       }
   }, [aiSettings, isLoaded]);
+
+  // Bridge Health Check
+  const checkBridge = async () => {
+      if (!aiSettings.localBridgeEnabled) {
+          setBridgeStatus('unknown');
+          return;
+      }
+      const alive = await checkBridgeHealth(aiSettings.localBridgeUrl);
+      setBridgeStatus(alive ? 'connected' : 'disconnected');
+  };
+
+  // Poll Bridge Health every 10s if enabled
+  useEffect(() => {
+      if (!aiSettings.localBridgeEnabled) return;
+      const interval = setInterval(checkBridge, 10000);
+      return () => clearInterval(interval);
+  }, [aiSettings.localBridgeEnabled, aiSettings.localBridgeUrl]);
 
   // File Handlers
   const handleExport = () => {
@@ -191,14 +213,28 @@ export default function App() {
           await bridgeSetRoot(aiSettings.localProjectPath, aiSettings);
           setToast({ message: "Project Root Updated!", type: 'success' });
           addLog(`Bridge Config: Root set to ${aiSettings.localProjectPath}`);
+          checkBridge(); // Update status
       } catch (e: any) {
           setToast({ message: "Failed to set root: " + e.message, type: 'error' });
           addLog(`Error setting root: ${e.message}`);
+          setBridgeStatus('disconnected');
       }
   };
 
   const handleBrowseSelect = (path: string) => {
       setAiSettings(s => ({ ...s, localProjectPath: path }));
+  };
+
+  const handleTestBridgeConnection = async () => {
+      setToast({ message: "Testing connection...", type: "info" });
+      const alive = await checkBridgeHealth(aiSettings.localBridgeUrl);
+      if (alive) {
+          setBridgeStatus('connected');
+          setToast({ message: "Connection Successful!", type: "success" });
+      } else {
+          setBridgeStatus('disconnected');
+          setToast({ message: "Connection Failed. Check terminal.", type: "error" });
+      }
   };
 
   // Node Actions
@@ -675,8 +711,15 @@ export default function App() {
                     <div className="flex items-center -space-x-2">
                         {/* Gemini Dot */}
                         <div className={`w-3 h-3 rounded-full border-2 border-gray-900 ${aiSettings.geminiKey ? 'bg-blue-500' : 'bg-gray-700'}`} title="Gemini"></div>
-                        {/* Local Bridge Dot */}
-                        <div className={`w-3 h-3 rounded-full border-2 border-gray-900 ${aiSettings.localBridgeEnabled ? 'bg-green-500' : 'bg-gray-700'}`} title="Local Bridge"></div>
+                        
+                        {/* Local Bridge Dot with Auto-Status */}
+                        <div className={`w-3 h-3 rounded-full border-2 border-gray-900 relative ${
+                            !aiSettings.localBridgeEnabled ? 'bg-gray-700' : 
+                            bridgeStatus === 'connected' ? 'bg-green-500' : 
+                            bridgeStatus === 'disconnected' ? 'bg-red-500' : 'bg-yellow-500'
+                        }`} title="Local Bridge">
+                             {aiSettings.localBridgeEnabled && bridgeStatus === 'disconnected' && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-red-400 rounded-full animate-ping"></span>}
+                        </div>
                     </div>
                     <div className="flex flex-col items-start">
                         <span className="text-[10px] font-bold text-gray-400 group-hover:text-white leading-none uppercase tracking-wider">Providers</span>
@@ -823,10 +866,25 @@ export default function App() {
 
                         {/* Local Bridge Config - Highlighting this for Project Management */}
                         <div className="space-y-3 pb-6 border-b border-gray-800 bg-gray-850/50 p-4 rounded-lg border border-indigo-900/30">
-                            <h3 className="font-medium text-white flex items-center gap-2"><Network className="w-4 h-4 text-indigo-400" /> Local Bridge (Game Engine Mode)</h3>
-                            <p className="text-xs text-gray-400">Enables Read/Write/Run on your local machine via a local server.</p>
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="font-medium text-white flex items-center gap-2"><Network className="w-4 h-4 text-indigo-400" /> Local Bridge</h3>
+                                
+                                {/* Status Indicator */}
+                                {aiSettings.localBridgeEnabled && (
+                                    <div className={`flex items-center gap-2 px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${
+                                        bridgeStatus === 'connected' ? 'bg-green-900/30 text-green-400 border-green-800' : 
+                                        bridgeStatus === 'disconnected' ? 'bg-red-900/30 text-red-400 border-red-800' : 
+                                        'bg-gray-700 text-gray-400 border-gray-600'
+                                    }`}>
+                                        {bridgeStatus === 'connected' ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+                                        {bridgeStatus === 'connected' ? 'Connected' : bridgeStatus === 'disconnected' ? 'Offline' : 'Unknown'}
+                                    </div>
+                                )}
+                            </div>
                             
-                            <div className="flex flex-col gap-4 mt-2">
+                            <p className="text-xs text-gray-400 mb-4">Enables Read/Write/Run on your local machine via a local server.</p>
+                            
+                            <div className="flex flex-col gap-4">
                                 {/* Enable / Disable */}
                                 <div className="flex items-center gap-3">
                                     <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
@@ -845,6 +903,22 @@ export default function App() {
                                         className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm" 
                                         placeholder="http://localhost:3001" 
                                     />
+                                    <button
+                                        onClick={handleTestBridgeConnection}
+                                        disabled={!aiSettings.localBridgeEnabled}
+                                        className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-200 px-3 py-2 rounded text-xs font-bold whitespace-nowrap"
+                                    >
+                                        Test Connection
+                                    </button>
+                                </div>
+                                
+                                {/* Help Tip for Cloud IDEs */}
+                                <div className="p-2 rounded bg-blue-900/20 border border-blue-900/50 flex gap-2">
+                                    <HelpCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                                    <div className="text-[10px] text-gray-400">
+                                        <span className="font-bold text-blue-300 block mb-0.5">Don't see Port 3001?</span>
+                                        If in VS Code Web/IDX: Open "Ports" tab → Click "Add Port" → Enter 3001 → Copy the URL here.
+                                    </div>
                                 </div>
 
                                 {/* Project Path Config */}
@@ -860,14 +934,14 @@ export default function App() {
                                         />
                                         <button 
                                             onClick={() => setShowFileBrowser(true)}
-                                            disabled={!aiSettings.localBridgeEnabled}
+                                            disabled={!aiSettings.localBridgeEnabled || bridgeStatus !== 'connected'}
                                             className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-bold whitespace-nowrap flex items-center gap-1"
                                         >
                                            <FolderOpen className="w-3 h-3" /> Browse...
                                         </button>
                                         <button 
                                             onClick={handleSetRoot}
-                                            disabled={!aiSettings.localBridgeEnabled}
+                                            disabled={!aiSettings.localBridgeEnabled || bridgeStatus !== 'connected'}
                                             className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white px-3 py-2 rounded text-xs font-bold whitespace-nowrap"
                                         >
                                             Set Root

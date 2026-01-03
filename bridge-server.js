@@ -8,6 +8,7 @@ const os = require('os');
 
 const app = express();
 const PORT = 3001;
+const HOST = '0.0.0.0'; // BIND TO ALL INTERFACES (Fixes Cloud IDE Port Detection)
 
 // --- CONFIGURATION ---
 // We set your Engine Path here.
@@ -15,7 +16,22 @@ const PORT = 3001;
 let PROJECT_ROOT = process.env.PROJECT_ROOT || "D:\\Dev\\ti3D_main\\ti3D_new-main";
 
 // Middleware
-app.use(cors()); // Allow frontend (localhost:3002) to call this
+
+// 1. Add Private Network Access Headers BEFORE CORS
+// This ensures they are present even if the CORS middleware terminates the request (e.g. OPTIONS)
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Private-Network", "true");
+    next();
+});
+
+// 2. Enable CORS for all origins
+app.use(cors({
+    origin: true, // Reflect request origin
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Access-Control-Allow-Private-Network']
+}));
+
 app.use(bodyParser.json({ limit: '50mb' }));
 
 // Helper to resolve paths relative to PROJECT_ROOT
@@ -194,10 +210,15 @@ async function getFiles(dir) {
     return Array.prototype.concat(...files);
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
     console.log(`-----------------------------------------------------`);
-    console.log(`🔌 Local Bridge Server running on http://localhost:${PORT}`);
+    console.log(`🔌 Local Bridge Server running on http://${HOST}:${PORT}`);
     console.log(`📂 Linked Project Root: ${PROJECT_ROOT}`);
-    console.log(`   - Frontend Access: Allowed (CORS enabled)`);
+    console.log(`-----------------------------------------------------`);
+    console.log(`⚠️  CLOUD IDE USERS (IDX, Replit, VS Code Web) ⚠️`);
+    console.log(`1. Open your 'PORTS' or 'Networking' tab.`);
+    console.log(`2. If Port 3001 is missing, manually add it.`);
+    console.log(`3. Copy the Public HTTPS URL for Port 3001.`);
+    console.log(`4. Paste it into FlowGen Settings -> Local Bridge URL.`);
     console.log(`-----------------------------------------------------`);
 });

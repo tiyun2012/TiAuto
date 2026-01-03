@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Node, NodeType, NodeShape, AISettings, AIProvider } from '../types';
 import { X, Copy, Trash2, Maximize2, Square, Circle, RectangleHorizontal, Monitor, Terminal, FileText, ChevronDown, Sparkles, Wand2, AlertTriangle, AlertCircle, Info, CheckCircle2, Bot, Brain, Globe, ExternalLink, Wrench, Server, Zap, Lightbulb, BookOpen, Download, FileCode, FileJson, FileType, Code2, Repeat, FolderOpen, Users, Layers, GitFork, Network, Save, Briefcase, GitBranch, ArrowRightLeft } from 'lucide-react';
@@ -168,6 +167,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
           default: return "";
       }
   };
+  
+  // Render Warning if Bridge is disabled but node needs it
+  const renderBridgeWarning = () => {
+      if (node.data.useLocalBridge && !aiSettings.localBridgeEnabled) {
+          return (
+            <div className="mb-4 p-3 bg-red-900/30 border border-red-700/50 rounded-lg flex items-center gap-3 animate-in fade-in">
+                <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+                <div className="flex-1">
+                    <p className="text-xs text-red-300 font-bold">Local Bridge Disabled</p>
+                    <p className="text-[10px] text-gray-400">Enable "Local Bridge" in Settings to use this feature.</p>
+                </div>
+            </div>
+          );
+      }
+      return null;
+  };
 
   // --------------------
 
@@ -278,6 +293,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide">
         
+        {/* Warning Banner */}
+        {renderBridgeWarning()}
+
         {/* Basic Node Info */}
         <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2 space-y-2">
