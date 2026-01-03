@@ -8,13 +8,25 @@ const path = require('path');
 const app = express();
 const PORT = 3001;
 
+// --- CONFIGURATION ---
+// We set your Engine Path here.
+// You can change this string later if you move your project.
+const PROJECT_ROOT = process.env.PROJECT_ROOT || "D:\\Dev\\ti3D_main\\ti3D_new-main";
+
 // Middleware
 app.use(cors()); // Allow frontend (localhost:3002) to call this
 app.use(bodyParser.json({ limit: '50mb' }));
 
+// Helper to resolve paths relative to PROJECT_ROOT
+const resolvePath = (userPath) => {
+    // If user provides absolute path, use it. Otherwise join with ROOT.
+    if (path.isAbsolute(userPath)) return path.normalize(userPath);
+    return path.resolve(PROJECT_ROOT, userPath);
+};
+
 // 1. Health Check
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', mode: 'local-bridge' });
+    res.json({ status: 'ok', mode: 'local-bridge', root: PROJECT_ROOT });
 });
 
 // 2. Execute Shell Commands
@@ -25,17 +37,17 @@ app.post('/api/execute', async (req, res) => {
         return res.status(400).json({ error: 'Command is required' });
     }
 
-    console.log(`[EXEC] ${command}`);
+    // Default to PROJECT_ROOT if no specific folder is requested
+    const targetCwd = cwd ? resolvePath(cwd) : PROJECT_ROOT;
 
-    // Execution options
+    console.log(`[EXEC] "${command}" in ${targetCwd}`);
+
     const options = {
-        cwd: cwd || process.cwd(), // Default to project root if no path provided
-        maxBuffer: 1024 * 1024 * 10 // 10MB buffer for large outputs
+        cwd: targetCwd, 
+        maxBuffer: 1024 * 1024 * 10 // 10MB buffer
     };
 
     exec(command, options, (error, stdout, stderr) => {
-        // We return everything, even if there was an error code, 
-        // because sometimes stderr contains useful info (like git status)
         res.json({
             stdout: stdout || '',
             stderr: stderr || '',
@@ -51,7 +63,7 @@ app.post('/api/read', async (req, res) => {
     if (!filePath) return res.status(400).json({ error: 'Path is required' });
 
     try {
-        const absolutePath = path.resolve(filePath);
+        const absolutePath = resolvePath(filePath);
         console.log(`[READ] ${absolutePath}`);
         const content = await fs.readFile(absolutePath, 'utf-8');
         res.json({ content });
@@ -70,7 +82,7 @@ app.post('/api/write', async (req, res) => {
     }
 
     try {
-        const absolutePath = path.resolve(filePath);
+        const absolutePath = resolvePath(filePath);
         console.log(`[WRITE] ${absolutePath}`);
         
         // Ensure directory exists
@@ -87,13 +99,16 @@ app.post('/api/write', async (req, res) => {
 // 5. List Files (Project Indexing)
 app.post('/api/list', async (req, res) => {
     const { path: dirPath } = req.body;
-    const targetDir = path.resolve(dirPath || '.');
+    // Default to PROJECT_ROOT if '.' or empty string is passed
+    const targetDir = resolvePath(dirPath || '.');
 
     console.log(`[LIST] ${targetDir}`);
 
     try {
         const files = await getFiles(targetDir);
-        res.json({ files });
+        // Return relative paths so the AI context isn't flooded with "D:\Dev\..."
+        const relativeFiles = files.map(f => path.relative(PROJECT_ROOT, f));
+        res.json({ files: relativeFiles });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -101,12 +116,19 @@ app.post('/api/list', async (req, res) => {
 
 // Helper for recursive file listing
 async function getFiles(dir) {
-    const dirents = await fs.readdir(dir, { withFileTypes: true });
+    let dirents;
+    try {
+        dirents = await fs.readdir(dir, { withFileTypes: true });
+    } catch (e) {
+        console.error(`Error reading dir ${dir}: ${e.message}`);
+        return [];
+    }
+
     const files = await Promise.all(dirents.map((dirent) => {
         const res = path.resolve(dir, dirent.name);
-        // Ignore node_modules, .git, and build folders to keep context small
+        // Ignore heavy folders
         if (dirent.isDirectory()) {
-            if (dirent.name === 'node_modules' || dirent.name === '.git' || dirent.name === 'dist' || dirent.name === 'build') {
+            if (['node_modules', '.git', 'dist', 'build', '.vs', 'bin', 'obj'].includes(dirent.name)) {
                 return [];
             }
             return getFiles(res);
@@ -120,7 +142,7 @@ async function getFiles(dir) {
 app.listen(PORT, () => {
     console.log(`-----------------------------------------------------`);
     console.log(`🔌 Local Bridge Server running on http://localhost:${PORT}`);
-    console.log(`   - Mode: Full System Access (Read/Write/Exec)`);
-    console.log(`   - Frontend should run on Port 3002`);
+    console.log(`📂 Linked Project Root: ${PROJECT_ROOT}`);
+    console.log(`   - Frontend Access: Allowed (CORS enabled)`);
     console.log(`-----------------------------------------------------`);
 });
