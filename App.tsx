@@ -7,7 +7,8 @@ import { Node, Edge, INITIAL_NODES, INITIAL_EDGES, NodeType, AISettings, AIProvi
 import { executeNode } from './services/workflowEngine';
 import { refineCode } from './services/geminiService';
 import { parseOutputToFiles } from './services/fileParsingService';
-import { bridgeSetRoot } from './services/localBridgeService';
+// IMPORT THE NEW SERVICE FUNCTION
+import { bridgeSetRoot } from './services/localBridgeService'; 
 import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson, Settings, Key, Server, Link, Network, Square, Play, ScrollText, ChevronUp, ChevronDown } from 'lucide-react';
 import { APP_TEMPLATES, Template } from './data/templates';
 
@@ -50,7 +51,8 @@ export default function App() {
 
       localBridgeEnabled: false,
       localBridgeUrl: 'http://localhost:3001',
-      localProjectPath: 'D:\\Dev\\ti3D_main\\ti3D_new-main'
+      // INITIALIZE THE PATH (Matches your default in server.js)
+      localProjectPath: "D:\\Dev\\ti3D_main\\ti3D_new-main" 
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -73,7 +75,6 @@ export default function App() {
     if (savedSettings) {
         try {
             const parsed = JSON.parse(savedSettings);
-            // Merge defaults for new fields
             setAiSettings(prev => ({...prev, ...parsed}));
         } catch(e) {}
     }
@@ -177,6 +178,20 @@ export default function App() {
   const addLog = (message: string) => {
       const time = new Date().toLocaleTimeString('en-US', { hour12: false });
       setLogs(prev => [`[${time}] ${message}`, ...prev]);
+  };
+
+  // --- NEW: Handle Setting Project Root ---
+  const handleSetRoot = async () => {
+      if (!aiSettings.localBridgeUrl || !aiSettings.localProjectPath) return;
+      try {
+          // Call the service function we imported
+          await bridgeSetRoot(aiSettings.localProjectPath, aiSettings);
+          setToast({ message: "Project Root Updated!", type: 'success' });
+          addLog(`Bridge Config: Root set to ${aiSettings.localProjectPath}`);
+      } catch (e: any) {
+          setToast({ message: "Failed to set root: " + e.message, type: 'error' });
+          addLog(`Error setting root: ${e.message}`);
+      }
   };
 
   // Node Actions
@@ -571,18 +586,6 @@ export default function App() {
           setIsExecuting(false);
       }
   };
-  
-  const handleSetBridgeRoot = async () => {
-      try {
-          setToast({ message: "Updating Bridge Root...", type: "info" });
-          const newRoot = await bridgeSetRoot(aiSettings.localProjectPath, aiSettings);
-          setToast({ message: `Success: Bridge Root set to ${newRoot}`, type: "success" });
-          addLog(`Bridge root updated to: ${newRoot}`);
-      } catch (error: any) {
-          setToast({ message: `Error setting root: ${error.message}`, type: "error" });
-          addLog(`Failed to set bridge root: ${error.message}`);
-      }
-  };
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId) || null;
 
@@ -789,57 +792,49 @@ export default function App() {
                              </div>
                         </div>
 
-                        {/* Local Bridge Config - Highlighting this for Project Management */}
+                        {/* Local Bridge Config */}
                         <div className="space-y-3 pb-6 border-b border-gray-800 bg-gray-850/50 p-4 rounded-lg border border-indigo-900/30">
                             <h3 className="font-medium text-white flex items-center gap-2"><Network className="w-4 h-4 text-indigo-400" /> Local Bridge (Game Engine Mode)</h3>
-                            <p className="text-xs text-gray-400">Enables Read/Write/Run on your local machine via a local server.</p>
                             
-                            <div className="flex flex-col gap-4 mt-2">
-                                {/* Enable / Disable */}
-                                <div className="flex items-center gap-3">
-                                    <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={aiSettings.localBridgeEnabled} 
-                                            onChange={(e) => setAiSettings(s => ({...s, localBridgeEnabled: e.target.checked}))}
-                                            className="rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500/20"
-                                        />
-                                        Enable Bridge
-                                    </label>
+                            <div className="flex items-center gap-3">
+                                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
                                     <input 
-                                        type="text" 
-                                        value={aiSettings.localBridgeUrl} 
-                                        onChange={(e) => setAiSettings(s => ({...s, localBridgeUrl: e.target.value}))} 
-                                        className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm" 
-                                        placeholder="http://localhost:3001" 
+                                        type="checkbox" 
+                                        checked={aiSettings.localBridgeEnabled} 
+                                        onChange={(e) => setAiSettings(s => ({...s, localBridgeEnabled: e.target.checked}))}
+                                        className="rounded bg-gray-700 border-gray-600 text-indigo-500"
                                     />
-                                </div>
-
-                                {/* Project Path Config */}
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Host Project Path (Root)</label>
-                                    <div className="flex gap-2">
-                                        <input 
-                                            type="text" 
-                                            value={aiSettings.localProjectPath} 
-                                            onChange={(e) => setAiSettings(s => ({...s, localProjectPath: e.target.value}))} 
-                                            className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm font-mono text-gray-300" 
-                                            placeholder="D:\Dev\MyProject" 
-                                        />
-                                        <button 
-                                            onClick={handleSetBridgeRoot}
-                                            disabled={!aiSettings.localBridgeEnabled}
-                                            className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white px-3 py-2 rounded text-xs font-bold whitespace-nowrap"
-                                        >
-                                            Set Root
-                                        </button>
-                                    </div>
-                                    <p className="text-[10px] text-gray-500">
-                                        Click "Set Root" to update the Bridge Server's working directory. 
-                                        This fixes "not a git repository" errors.
-                                    </p>
-                                </div>
+                                    Enable
+                                </label>
+                                <input 
+                                    type="text" 
+                                    value={aiSettings.localBridgeUrl} 
+                                    onChange={(e) => setAiSettings(s => ({...s, localBridgeUrl: e.target.value}))} 
+                                    className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm" 
+                                    placeholder="http://localhost:3001" 
+                                />
                             </div>
+
+                            {/* NEW: Project Root Input */}
+                            <div className="flex items-center gap-2 mt-2">
+                                <span className="text-xs text-gray-400 w-20 shrink-0">Project Root:</span>
+                                <input 
+                                    type="text" 
+                                    value={aiSettings.localProjectPath || "D:\\Dev\\ti3D_main\\ti3D_new-main"} 
+                                    onChange={(e) => setAiSettings(s => ({...s, localProjectPath: e.target.value}))} 
+                                    className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm font-mono" 
+                                    placeholder="Absolute path to project..." 
+                                />
+                                <button 
+                                    onClick={handleSetRoot}
+                                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded text-xs font-bold transition-colors"
+                                >
+                                    Set Root
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-gray-500 mt-1 pl-20">
+                                * This path must contain your .git folder.
+                            </p>
                         </div>
 
                         {/* Gemini Config */}
