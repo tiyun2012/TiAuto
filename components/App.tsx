@@ -44,7 +44,7 @@ export default function App() {
       openaiModel: 'gpt-4o',
 
       localBridgeEnabled: false,
-      localBridgeUrl: 'http://localhost:3000'
+      localBridgeUrl: 'http://localhost:3001'
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
