@@ -11,6 +11,71 @@ export interface Template {
 
 export const APP_TEMPLATES: Template[] = [
   {
+    name: "Project Admin Dashboard",
+    description: "A control center for managing your local project. Includes Git status, file indexing, and shell execution.",
+    nodes: [
+      {
+        id: 'admin-trigger',
+        type: NodeType.TRIGGER,
+        position: { x: 50, y: 300 },
+        data: { label: 'Refresh Dashboard', status: 'idle', shape: 'circle' }
+      },
+      {
+        id: 'admin-git',
+        type: NodeType.GIT_CONTROL,
+        position: { x: 300, y: 100 },
+        data: { 
+          label: 'Git Status', 
+          shape: 'rectangle', 
+          status: 'idle',
+          gitCommand: 'status',
+          useLocalBridge: true,
+          gitStopOnDirty: false 
+        }
+      },
+      {
+        id: 'admin-index',
+        type: NodeType.PROJECT_INDEX,
+        position: { x: 300, y: 300 },
+        data: { 
+          label: 'File System Index', 
+          shape: 'rectangle', 
+          status: 'idle',
+          useLocalBridge: true,
+          localPath: '.' // Root of the project
+        }
+      },
+      {
+        id: 'admin-shell',
+        type: NodeType.SHELL_EXEC,
+        position: { x: 300, y: 500 },
+        data: { 
+          label: 'Terminal Command', 
+          shape: 'square', 
+          status: 'idle',
+          useLocalBridge: true, // Execute on real machine
+          prompt: "dir" // Default to listing dir on Windows
+        }
+      },
+      {
+        id: 'admin-todo',
+        type: NodeType.TODO_LIST,
+        position: { x: 600, y: 300 },
+        data: { 
+          label: 'Project Roadmap', 
+          shape: 'rectangle', 
+          status: 'idle',
+          todo: "- [ ] Fix Git Status errors\n- [ ] Run Build\n- [ ] Implement new feature" 
+        }
+      }
+    ],
+    edges: [
+      { id: 'ae-1', source: 'admin-trigger', target: 'admin-git' },
+      { id: 'ae-2', source: 'admin-trigger', target: 'admin-index' },
+      { id: 'ae-3', source: 'admin-trigger', target: 'admin-shell' }
+    ]
+  },
+  {
     name: "ti3d Autonomous Manager",
     description: "Safe, senior-level workflow for ti3d. Enforces ECS architecture, uses AI Debate for code review, and performs atomic git commits per file.",
     nodes: [
