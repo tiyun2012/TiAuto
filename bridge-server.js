@@ -17,6 +17,12 @@ let PROJECT_ROOT = process.env.PROJECT_ROOT || "D:\\Dev\\ti3D_main\\ti3D_new-mai
 
 // Middleware
 
+// 0. Request Logger (Debug)
+app.use((req, res, next) => {
+    console.log(`[REQUEST] ${req.method} ${req.url}`);
+    next();
+});
+
 // 1. Add Private Network Access Headers BEFORE CORS
 // This ensures they are present even if the CORS middleware terminates the request (e.g. OPTIONS)
 app.use((req, res, next) => {

@@ -15,6 +15,9 @@ import { AISettings } from "../types";
  * POST /api/browse { targetPath: string } -> { current: string, parent: string, folders: string[] }
  */
 
+// Helper to sanitize URL (remove trailing slash)
+const cleanUrl = (url: string) => url ? url.replace(/\/+$/, '') : '';
+
 const detectMixedContentError = (url: string) => {
     const isAppSecure = window.location.protocol === 'https:';
     const isTargetLocal = url.includes('localhost') || url.includes('127.0.0.1');
@@ -75,26 +78,31 @@ const checkEnabled = (settings: AISettings) => {
 
 export const checkBridgeHealth = async (baseUrl: string): Promise<boolean> => {
     try {
+        // Sanitize URL to avoid //health
+        const target = `${cleanUrl(baseUrl)}/health`;
+        
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2000);
-        const res = await fetch(`${baseUrl}/health`, { signal: controller.signal });
+        const res = await fetch(target, { signal: controller.signal });
         clearTimeout(timeoutId);
         return res.ok;
     } catch (e: any) {
-        console.warn("Bridge Health Check Failed:", e.message);
+        console.warn(`Bridge Health Check Failed (${baseUrl}):`, e.message);
         return false;
     }
 };
 
 export const bridgeSetRoot = async (path: string, settings: AISettings): Promise<string> => {
     checkEnabled(settings);
-    const data = await handleBridgeRequest(`${settings.localBridgeUrl}/api/config`, { projectRoot: path }, "Failed to set Root");
+    const url = `${cleanUrl(settings.localBridgeUrl)}/api/config`;
+    const data = await handleBridgeRequest(url, { projectRoot: path }, "Failed to set Root");
     return data.root;
 };
 
 export const bridgeExecute = async (command: string, settings: AISettings): Promise<string> => {
     checkEnabled(settings);
-    const data = await handleBridgeRequest(`${settings.localBridgeUrl}/api/execute`, { command }, "Bridge Execution Failed");
+    const url = `${cleanUrl(settings.localBridgeUrl)}/api/execute`;
+    const data = await handleBridgeRequest(url, { command }, "Bridge Execution Failed");
     
     // Combine stdout and stderr for the logs
     let output = data.stdout || "";
@@ -105,19 +113,22 @@ export const bridgeExecute = async (command: string, settings: AISettings): Prom
 
 export const bridgeReadFile = async (path: string, settings: AISettings): Promise<string> => {
     checkEnabled(settings);
-    const data = await handleBridgeRequest(`${settings.localBridgeUrl}/api/read`, { path }, "Bridge Read Failed");
+    const url = `${cleanUrl(settings.localBridgeUrl)}/api/read`;
+    const data = await handleBridgeRequest(url, { path }, "Bridge Read Failed");
     return data.content;
 };
 
 export const bridgeWriteFile = async (path: string, content: string, settings: AISettings): Promise<string> => {
     checkEnabled(settings);
-    await handleBridgeRequest(`${settings.localBridgeUrl}/api/write`, { path, content }, "Bridge Write Failed");
+    const url = `${cleanUrl(settings.localBridgeUrl)}/api/write`;
+    await handleBridgeRequest(url, { path, content }, "Bridge Write Failed");
     return `Successfully wrote to ${path}`;
 };
 
 export const bridgeListFiles = async (path: string, settings: AISettings): Promise<string[]> => {
     checkEnabled(settings);
-    const data = await handleBridgeRequest(`${settings.localBridgeUrl}/api/list`, { path: path || '.' }, "Bridge List Failed");
+    const url = `${cleanUrl(settings.localBridgeUrl)}/api/list`;
+    const data = await handleBridgeRequest(url, { path: path || '.' }, "Bridge List Failed");
     return Array.isArray(data.files) ? data.files : [];
 };
 
@@ -130,5 +141,6 @@ export interface BrowserData {
 
 export const bridgeBrowse = async (path: string, settings: AISettings): Promise<BrowserData> => {
     checkEnabled(settings);
-    return await handleBridgeRequest(`${settings.localBridgeUrl}/api/browse`, { targetPath: path }, "Browse Failed");
+    const url = `${cleanUrl(settings.localBridgeUrl)}/api/browse`;
+    return await handleBridgeRequest(url, { targetPath: path }, "Browse Failed");
 };

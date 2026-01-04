@@ -1,5 +1,3 @@
-
-
 import { Node, Edge, NodeType, AISettings, AIProvider } from '../types';
 import { generateCode, checkCodeStructured, simulateExecution, generateUnitTests, refineCode, runDebate, runMultiProviderCheck } from './geminiService';
 import { runPythonCode } from './pyodideService';
@@ -93,12 +91,38 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
         }
 
         // 2. EXECUTION
+        let content = "";
         if (node.data.useLocalBridge && path) {
-            return await bridgeReadFile(path, aiSettings);
+            try {
+                content = await bridgeReadFile(path, aiSettings);
+            } catch (e: any) {
+                // IMPORTANT: If reading fails, assume it's a NEW file creation if we are in a generation loop.
+                // We return an empty marker so the Generator knows to create it.
+                if (e.message.includes('ENOENT') || e.message.includes('no such file')) {
+                    content = "// [NEW FILE] This file does not exist yet. Create it based on the requirements.";
+                } else {
+                    throw e;
+                }
+            }
         } else {
             if (!node.data.code) throw new Error("No file uploaded or local path specified.");
-            return node.data.code;
+            content = node.data.code;
         }
+
+        // 3. AUTO-CONTEXT PASS-THROUGH
+        // If a parent was a Task Iterator, prepend the instruction to the file content
+        // so downstream Generator nodes know what to do with this file.
+        const iteratorParent = parents.find(p => p.type === NodeType.TASK_ITERATOR);
+        if (iteratorParent && iteratorParent.data.output) {
+            const instructionMatch = iteratorParent.data.output.match(/Instruction:\s*([\s\S]+)/);
+            if (instructionMatch) {
+                // Return a combined context string
+                // We wrap the content in a block so Gemini treats it as file context
+                return `TASK CONTEXT (from Iterator):\n${instructionMatch[1].trim()}\n\nTARGET FILE CONTENT (${path}):\n${content}`;
+            }
+        }
+
+        return content;
     },
 
     [NodeType.PROJECT_INDEX]: async ({ node, aiSettings }) => {
@@ -417,6 +441,8 @@ export const executeNode = async (
         if ([NodeType.GEMINI_GENERATE, NodeType.READ_FILE, NodeType.ARCHITECT, NodeType.AI_DEBATE].includes(node.type)) {
              // If local read, we already have it in context, but parseOutputToFiles helps standardizing
              if (node.type === NodeType.READ_FILE && node.data.useLocalBridge) {
+                 // The result might now contain metadata headers, but we can treat it as content for now
+                 // or re-parse if needed. For simplicity, we just key it to the path.
                  extractedFiles = { [node.data.localPath!]: result };
              } else {
                  extractedFiles = parseOutputToFiles(result);
