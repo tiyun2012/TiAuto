@@ -337,8 +337,6 @@ const Canvas: React.FC<CanvasProps> = ({
           }
 
           // Cleanup Connecting
-          // Note: Port MouseUp handles the actual connection logic if landed on a port.
-          // This global handler just clears the visual line if dropped elsewhere.
           if (isConnecting) {
               setDragEdge(null);
           }
@@ -361,7 +359,7 @@ const Canvas: React.FC<CanvasProps> = ({
           window.removeEventListener('mousemove', handleWindowMouseMove);
           window.removeEventListener('mouseup', handleWindowMouseUp);
       };
-  }, [onNodesChange, onSelectNode]); // Dependencies that are functions (stable)
+  }, [onNodesChange, onSelectNode]); 
 
   // --- Port Mouse Up (Connection Finalize) ---
   const handlePortMouseUp = (e: React.MouseEvent, nodeId: string, handle: string) => {
@@ -370,7 +368,6 @@ const Canvas: React.FC<CanvasProps> = ({
 
       if (isConnecting && connStart) {
           if (connStart.nodeId !== nodeId) {
-              // Check duplicates
               const exists = edges.some(edge => 
                   edge.source === connStart.nodeId && edge.sourceHandle === connStart.handle &&
                   edge.target === nodeId && edge.targetHandle === handle
@@ -389,10 +386,25 @@ const Canvas: React.FC<CanvasProps> = ({
           }
       }
       
-      // Reset is handled by window mouseup, but we can clear specific state here to be safe
       setDragEdge(null);
       dragRef.current.isConnecting = false;
       dragRef.current.connectionStart = null;
+  };
+
+  // --- Drag & Drop (Sidebar to Canvas) ---
+  const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      const type = e.dataTransfer.getData('application/flowgen-node') as NodeType;
+      if (type) {
+          const pos = screenToWorld(e.clientX, e.clientY);
+          // Offset to center (approximate based on standard node size)
+          addNode(type, { x: pos.x - 70, y: pos.y - 35 });
+      }
   };
 
   // --- Context Menu Handlers ---
@@ -438,6 +450,8 @@ const Canvas: React.FC<CanvasProps> = ({
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onContextMenu={handleCanvasContextMenu}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
       style={{
         backgroundImage: `linear-gradient(to right, #1f2937 1px, transparent 1px), linear-gradient(to bottom, #1f2937 1px, transparent 1px)`,
         backgroundSize: `${24 * view.zoom}px ${24 * view.zoom}px`,
