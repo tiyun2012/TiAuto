@@ -1,8 +1,10 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Node, Edge, NodeType, NodeShape } from '../types';
+
+import React, { useRef, useState, useEffect } from 'react';
+import { Node, Edge, NodeType } from '../types';
 import NodeComponent from './NodeComponent';
+import { Wire } from './Wire';
 import { getPortPosition, NODE_DIMENSIONS } from '../constants';
-import { Search, Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical, FileDiff, ThumbsUp, Repeat, FolderOpen, Users, Layers, GitFork, Save, GitBranch, Briefcase, FileSearch, ListRestart } from 'lucide-react';
+import { Play, FileCode, ShieldCheck, Terminal, Laptop, StickyNote, Trash2, X, ListTodo, Binary, SquareTerminal, FlaskConical, FileDiff, ThumbsUp, Repeat, FolderOpen, Users, Layers, GitFork, Save, GitBranch, Briefcase, FileSearch, ListRestart } from 'lucide-react';
 
 interface CanvasProps {
   nodes: Node[];
@@ -56,7 +58,7 @@ const Canvas: React.FC<CanvasProps> = ({
   // Viewport State
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 });
   
-  // Refs for tracking mutable interaction state (Avoids stale closures in event listeners)
+  // Refs for tracking mutable interaction state
   const viewRef = useRef(view);
   const nodesRef = useRef(nodes);
   const selectedNodeIdsRef = useRef(selectedNodeIds);
@@ -72,12 +74,9 @@ const Canvas: React.FC<CanvasProps> = ({
       connectionStart: null as { nodeId: string, handle: string } | null,
   });
 
-  // Visual Feedback States (Trigger re-renders)
   const [selectionBox, setSelectionBox] = useState<{start: {x:number, y:number}, end: {x:number, y:number}} | null>(null);
-  const [dragEdge, setDragEdge] = useState<{start: {x:number, y:number}, end: {x:number, y:number}} | null>(null);
+  const [dragEdge, setDragEdge] = useState<{start: {x:number, y:number, side?: any}, end: {x:number, y:number, side?: any}} | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  
-  // Context Menu
   const [contextMenu, setContextMenu] = useState<ContextMenuType | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
 
@@ -94,7 +93,7 @@ const Canvas: React.FC<CanvasProps> = ({
         if (activeTag === 'input' || activeTag === 'textarea') return;
 
         if (selectedNodeIds.length > 0) {
-            onDeleteNode(selectedNodeIds[0]); // Triggers bulk delete in App
+            onDeleteNode(selectedNodeIds[0]); 
         } else if (selectedEdgeId) {
             onDeleteEdge(selectedEdgeId);
             setSelectedEdgeId(null);
@@ -152,11 +151,8 @@ const Canvas: React.FC<CanvasProps> = ({
         setContextMenu(null);
         setPickerSearch('');
     }
-
-    // Right Click -> Ignored here (handled by contextmenu event)
     if (e.button === 2) return;
 
-    // Pan (Middle or Alt+Left)
     if (e.button === 1 || (e.button === 0 && e.altKey)) {
         e.preventDefault();
         dragRef.current.isPanning = true;
@@ -164,7 +160,6 @@ const Canvas: React.FC<CanvasProps> = ({
         return;
     }
 
-    // Left Click on Canvas Background -> Marquee
     if (e.button === 0 && (e.target === canvasRef.current || (e.target as HTMLElement).tagName === 'svg')) {
         if (!e.ctrlKey && !e.metaKey) {
             onSelectNode([]);
@@ -183,7 +178,6 @@ const Canvas: React.FC<CanvasProps> = ({
       e.stopPropagation();
       e.preventDefault();
       
-      // Right/Middle ignore
       if (e.button !== 0 || e.altKey) return;
 
       const selected = selectedNodeIdsRef.current;
@@ -196,14 +190,13 @@ const Canvas: React.FC<CanvasProps> = ({
               newSelected.push(id);
           }
       } else {
-          // If unselected, clear and select only this (unless dragging a group)
           if (!newSelected.includes(id)) {
               newSelected = [id];
           }
       }
 
       onSelectNode(newSelected);
-      setSelectedEdgeId(null); // Deselect edges
+      setSelectedEdgeId(null); 
 
       dragRef.current.isDraggingNodes = true;
       dragRef.current.lastMouse = { x: e.clientX, y: e.clientY };
@@ -214,15 +207,53 @@ const Canvas: React.FC<CanvasProps> = ({
       e.stopPropagation();
       e.preventDefault();
       
-      dragRef.current.isConnecting = true;
-      dragRef.current.connectionStart = { nodeId, handle };
-      
-      // Calculate start pos for visual line
-      const sourceNode = nodes.find(n => n.id === nodeId);
-      if (sourceNode) {
-          const startPos = getPortPosition(sourceNode.position.x, sourceNode.position.y, sourceNode.data.shape, handle);
+      const node = nodes.find(n => n.id === nodeId);
+      if (!node) return;
+
+      // 1. Detach Mode: Check if input port has existing connection
+      const existingEdgeIdx = edges.findIndex(edge => edge.target === nodeId && edge.targetHandle === handle);
+
+      if (existingEdgeIdx !== -1) {
+          const edge = edges[existingEdgeIdx];
+          
+          // Remove existing edge from graph
+          const newEdges = [...edges];
+          newEdges.splice(existingEdgeIdx, 1);
+          onEdgesChange(newEdges);
+
+          // Start dragging from the original Source
+          dragRef.current.isConnecting = true;
+          dragRef.current.connectionStart = { 
+              nodeId: edge.source, 
+              handle: edge.sourceHandle || 'right' 
+          };
+          
+          const sourceNode = nodes.find(n => n.id === edge.source);
+          if (sourceNode) {
+              const startPos = getPortPosition(
+                  sourceNode.position.x, 
+                  sourceNode.position.y, 
+                  sourceNode.data.shape, 
+                  edge.sourceHandle, 
+                  sourceNode.type
+              );
+              const worldMouse = screenToWorld(e.clientX, e.clientY);
+              setDragEdge({ 
+                  start: { ...startPos, side: startPos.side as any }, 
+                  end: { ...worldMouse, side: undefined } 
+              });
+          }
+      } else {
+          // 2. New Connection Mode
+          dragRef.current.isConnecting = true;
+          dragRef.current.connectionStart = { nodeId, handle };
+          
+          const startPos = getPortPosition(node.position.x, node.position.y, node.data.shape, handle, node.type);
           const worldMouse = screenToWorld(e.clientX, e.clientY);
-          setDragEdge({ start: startPos, end: worldMouse });
+          setDragEdge({ 
+              start: { ...startPos, side: startPos.side as any }, 
+              end: { ...worldMouse, side: undefined } 
+          });
       }
   };
 
@@ -231,7 +262,6 @@ const Canvas: React.FC<CanvasProps> = ({
       const handleWindowMouseMove = (e: MouseEvent) => {
           const { isPanning, isDraggingNodes, isSelecting, isConnecting, lastMouse, selectionStart } = dragRef.current;
           
-          // 1. Panning
           if (isPanning) {
               const dx = e.clientX - lastMouse.x;
               const dy = e.clientY - lastMouse.y;
@@ -240,7 +270,6 @@ const Canvas: React.FC<CanvasProps> = ({
               return;
           }
 
-          // 2. Dragging Nodes
           if (isDraggingNodes) {
               const v = viewRef.current;
               const dx = (e.clientX - lastMouse.x) / v.zoom;
@@ -258,7 +287,6 @@ const Canvas: React.FC<CanvasProps> = ({
               return;
           }
 
-          // 3. Marquee Selection
           if (isSelecting && canvasRef.current) {
               const rect = canvasRef.current.getBoundingClientRect();
               const currentX = e.clientX - rect.left;
@@ -271,41 +299,34 @@ const Canvas: React.FC<CanvasProps> = ({
               return;
           }
 
-          // 4. Connecting
           if (isConnecting) {
-              // Update only the end position of the drag line
               const v = viewRef.current;
               const rect = canvasRef.current?.getBoundingClientRect();
               if (rect && dragRef.current.connectionStart) {
-                  // We need to keep Start fixed, update End
                   setDragEdge(prev => {
                       if (!prev) return null;
                       const worldX = (e.clientX - rect.left - v.x) / v.zoom;
                       const worldY = (e.clientY - rect.top - v.y) / v.zoom;
-                      return { ...prev, end: { x: worldX, y: worldY } };
+                      return { ...prev, end: { x: worldX, y: worldY, side: undefined } };
                   });
               }
           }
       };
 
       const handleWindowMouseUp = (e: MouseEvent) => {
-          const { isSelecting, isConnecting, connectionStart: connStart, selectionStart } = dragRef.current;
+          const { isSelecting, isConnecting, selectionStart } = dragRef.current;
 
-          // Cleanup Marquee
           if (isSelecting && canvasRef.current) {
               const rect = canvasRef.current.getBoundingClientRect();
               const endX = e.clientX - rect.left;
               const endY = e.clientY - rect.top;
-              
               const v = viewRef.current;
               
-              // Normalize bounds
               const minX = Math.min(selectionStart.x, endX);
               const maxX = Math.max(selectionStart.x, endX);
               const minY = Math.min(selectionStart.y, endY);
               const maxY = Math.max(selectionStart.y, endY);
 
-              // Convert to World
               const worldL = (minX - v.x) / v.zoom;
               const worldR = (maxX - v.x) / v.zoom;
               const worldT = (minY - v.y) / v.zoom;
@@ -319,7 +340,6 @@ const Canvas: React.FC<CanvasProps> = ({
                   const nT = n.position.y;
                   const nB = n.position.y + dim.height;
 
-                  // Intersection test
                   if (nL < worldR && nR > worldL && nT < worldB && nB > worldT) {
                       foundIds.push(n.id);
                   }
@@ -332,16 +352,13 @@ const Canvas: React.FC<CanvasProps> = ({
               } else {
                   onSelectNode(foundIds);
               }
-              
               setSelectionBox(null);
           }
 
-          // Cleanup Connecting
           if (isConnecting) {
               setDragEdge(null);
           }
 
-          // Reset All Drag Flags
           dragRef.current = {
               ...dragRef.current,
               isPanning: false,
@@ -391,7 +408,6 @@ const Canvas: React.FC<CanvasProps> = ({
       dragRef.current.connectionStart = null;
   };
 
-  // --- Drag & Drop (Sidebar to Canvas) ---
   const handleDragOver = (e: React.DragEvent) => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
@@ -402,12 +418,10 @@ const Canvas: React.FC<CanvasProps> = ({
       const type = e.dataTransfer.getData('application/flowgen-node') as NodeType;
       if (type) {
           const pos = screenToWorld(e.clientX, e.clientY);
-          // Offset to center (approximate based on standard node size)
           addNode(type, { x: pos.x - 70, y: pos.y - 35 });
       }
   };
 
-  // --- Context Menu Handlers ---
   const handleCanvasContextMenu = (e: React.MouseEvent) => {
       e.preventDefault();
       if (dragRef.current.isPanning) return;
@@ -437,7 +451,6 @@ const Canvas: React.FC<CanvasProps> = ({
       setContextMenu(null);
   };
 
-  // --- Render ---
   const filteredNodes = NODE_OPTIONS.filter(opt => 
       opt.label.toLowerCase().includes(pickerSearch.toLowerCase()) || 
       opt.desc.toLowerCase().includes(pickerSearch.toLowerCase())
@@ -462,65 +475,45 @@ const Canvas: React.FC<CanvasProps> = ({
         className="absolute top-0 left-0 w-full h-full pointer-events-none origin-top-left"
         style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}
       >
-          {/* Edges */}
+          {/* Render Wires (Edges) */}
           <svg className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible">
             {edges.map(edge => {
               const source = nodes.find(n => n.id === edge.source);
               const target = nodes.find(n => n.id === edge.target);
               if (!source || !target) return null;
 
-              const start = getPortPosition(source.position.x, source.position.y, source.data.shape, edge.sourceHandle);
-              const end = getPortPosition(target.position.x, target.position.y, target.data.shape, edge.targetHandle);
-
-              let c1x = start.x, c1y = start.y, c2x = end.x, c2y = end.y;
-              const dist = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
-              const offset = Math.min(dist * 0.5, 100);
-
-              if (edge.sourceHandle === 'left') c1x -= offset; else if (edge.sourceHandle === 'right') c1x += offset; else if (edge.sourceHandle === 'top') c1y -= offset; else c1y += offset;
-              if (edge.targetHandle === 'left') c2x -= offset; else if (edge.targetHandle === 'right') c2x += offset; else if (edge.targetHandle === 'top') c2y -= offset; else c2y += offset;
-
-              const path = `M ${start.x} ${start.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${end.x} ${end.y}`;
-              const isSelected = selectedEdgeId === edge.id;
+              // Pass NodeType to allow correct vertical offset calculation
+              const start = getPortPosition(source.position.x, source.position.y, source.data.shape, edge.sourceHandle, source.type);
+              const end = getPortPosition(target.position.x, target.position.y, target.data.shape, edge.targetHandle, target.type);
 
               return (
-                <g key={edge.id} className="pointer-events-auto group">
-                     {/* Hitbox */}
-                     <path 
-                        d={path} 
-                        stroke="transparent" 
-                        strokeWidth="15" 
-                        fill="none" 
-                        className="cursor-pointer"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (e.ctrlKey || e.metaKey) { onDeleteEdge(edge.id); return; }
-                            setSelectedEdgeId(edge.id);
-                            onSelectNode([]); 
-                        }}
-                        onContextMenu={(e) => handleEdgeContextMenu(e, edge.id)}
-                     />
-                     {/* Visible Line */}
-                     <path d={path} stroke={isSelected ? "#FBBF24" : "#4B5563"} strokeWidth={isSelected ? "3" : "4"} fill="none" strokeLinecap="round" />
-                     {/* Highlight */}
-                     <path d={path} stroke={isSelected ? "#FBBF24" : "#60A5FA"} strokeWidth={2} fill="none" strokeLinecap="round" className={isSelected ? "opacity-100" : "opacity-80"} />
-                </g>
+                <Wire 
+                    key={edge.id}
+                    id={edge.id}
+                    start={{ x: start.x, y: start.y, side: start.side as any }}
+                    end={{ x: end.x, y: end.y, side: end.side as any }}
+                    isSelected={selectedEdgeId === edge.id}
+                    onSelect={() => {
+                        setSelectedEdgeId(edge.id);
+                        onSelectNode([]); 
+                    }}
+                    onDelete={() => onDeleteEdge(edge.id)}
+                    onContextMenu={(e) => handleEdgeContextMenu(e, edge.id)}
+                />
               );
             })}
 
-            {/* Drag Line */}
+            {/* Render Draft Wire (Dragging) */}
             {dragEdge && (
-                <path 
-                    d={`M ${dragEdge.start.x} ${dragEdge.start.y} L ${dragEdge.end.x} ${dragEdge.end.y}`} 
-                    stroke="#FBBF24" 
-                    strokeWidth="3" 
-                    strokeDasharray="6,4" 
-                    fill="none" 
-                    strokeLinecap="round" 
+                <Wire 
+                    start={dragEdge.start}
+                    end={dragEdge.end}
+                    isDraft={true}
                 />
             )}
           </svg>
 
-          {/* Nodes */}
+          {/* Render Nodes */}
           <div className="pointer-events-auto">
             {nodes.map(node => (
                 <NodeComponent 
@@ -537,7 +530,7 @@ const Canvas: React.FC<CanvasProps> = ({
           </div>
       </div>
       
-      {/* Marquee Box */}
+      {/* Selection Box */}
       {selectionBox && (
           <div 
             className="absolute border border-blue-400 bg-blue-500/20 z-50 pointer-events-none"

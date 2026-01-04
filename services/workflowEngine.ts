@@ -1,4 +1,4 @@
-import { Node, Edge, NodeType, AISettings, AIProvider } from '../types';
+import { Node, Edge, NodeType, AISettings, AIProvider, ShellType } from '../types';
 import { generateCode, checkCodeStructured, simulateExecution, generateUnitTests, refineCode, runDebate, runMultiProviderCheck } from './geminiService';
 import { runPythonCode } from './pyodideService';
 import { executeShellCommand } from './commandService';
@@ -74,17 +74,41 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
 
     [NodeType.READ_FILE]: async ({ node, parents, aiSettings }) => {
         // 1. DYNAMIC PATH LOGIC
-        // If connected to an Iterator or similar, try to extract the filename from the parent's text output
         let path = node.data.localPath;
         
+        // If no static path set, look for suggestions from parents (Context Finder logic)
         if (node.data.useLocalBridge && !path) {
-             // Look through parents for a dynamic path suggestion
              for (const p of parents) {
-                 // Regex matches "File: src/app.ts" or "File: /path/to/file.txt"
-                 const dynamicMatch = p.data.output?.match(/File:\s*([^\n]+)/);
-                 if (dynamicMatch) {
-                     path = dynamicMatch[1].trim();
-                     // console.log(`[Dynamic Read] Detected path from parent ${p.data.label}: ${path}`);
+                 // 1. Try to find a JSON list of files: { "related_files": ["a.ts", "b.ts"] }
+                 try {
+                     const jsonMatch = p.data.output?.match(/```json\s*([\s\S]*?)\s*```/);
+                     const jsonStr = jsonMatch ? jsonMatch[1] : (p.data.output?.match(/\{[\s\S]*\}/)?.[0] || "");
+                     if (jsonStr) {
+                         const parsed = JSON.parse(jsonStr);
+                         if (parsed.related_files && Array.isArray(parsed.related_files)) {
+                             path = parsed.related_files.join(',');
+                             break;
+                         }
+                         if (parsed.files && Array.isArray(parsed.files)) {
+                             // Sometimes architects output just a list of filenames
+                             if (typeof parsed.files[0] === 'string') {
+                                 path = parsed.files.join(',');
+                                 break;
+                             }
+                         }
+                     }
+                 } catch(e) {}
+
+                 // 2. Try Regex for "Files: a, b" or "File: a"
+                 const multiMatch = p.data.output?.match(/(?:Files|Target|Context):\s*([^\n]+)/i);
+                 if (multiMatch) {
+                     path = multiMatch[1].trim();
+                     break;
+                 }
+                 
+                 const singleMatch = p.data.output?.match(/File:\s*([^\n]+)/i);
+                 if (singleMatch) {
+                     path = singleMatch[1].trim();
                      break; 
                  }
              }
@@ -93,12 +117,16 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
         // 2. EXECUTION
         let content = "";
         if (node.data.useLocalBridge && path) {
-            // NEW: Multi-file support via comma separation
-            if (path.includes(',')) {
-                const paths = path.split(',').map(p => p.trim()).filter(p => p);
+            // Normalize path string (handle newlines or weird spacing)
+            const cleanPathStr = path.replace(/[\n\r]/g, '').trim();
+            const paths = cleanPathStr.split(',').map(p => p.trim()).filter(p => p && !p.includes('...')); // Filter out empty or "..."
+
+            if (paths.length > 0) {
                 const results = await Promise.all(paths.map(async (p) => {
                     try {
                         const c = await bridgeReadFile(p, aiSettings);
+                        // If result already contains headers (e.g. from recursive dir read), return as is
+                        if (c.includes('// --- FILE:')) return c;
                         return `// --- FILE: ${p} ---\n${c}`;
                     } catch (e: any) {
                          return `// --- FILE: ${p} ---\n(Error reading file: ${e.message})`;
@@ -106,18 +134,7 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
                 }));
                 content = results.join('\n\n');
             } else {
-                // Existing single file logic
-                try {
-                    content = await bridgeReadFile(path, aiSettings);
-                } catch (e: any) {
-                    // IMPORTANT: If reading fails, assume it's a NEW file creation if we are in a generation loop.
-                    // We return an empty marker so the Generator knows to create it.
-                    if (e.message.includes('ENOENT') || e.message.includes('no such file')) {
-                        content = "// [NEW FILE] This file does not exist yet. Create it based on the requirements.";
-                    } else {
-                        throw e;
-                    }
-                }
+                content = "// No valid file paths found to read.";
             }
         } else {
             if (!node.data.code) throw new Error("No file uploaded or local path specified.");
@@ -125,14 +142,11 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
         }
 
         // 3. AUTO-CONTEXT PASS-THROUGH
-        // If a parent was a Task Iterator, prepend the instruction to the file content
-        // so downstream Generator nodes know what to do with this file.
+        // If a parent was a Task Iterator, prepend the instruction
         const iteratorParent = parents.find(p => p.type === NodeType.TASK_ITERATOR);
         if (iteratorParent && iteratorParent.data.output) {
             const instructionMatch = iteratorParent.data.output.match(/Instruction:\s*([\s\S]+)/);
             if (instructionMatch) {
-                // Return a combined context string
-                // We wrap the content in a block so Gemini treats it as file context
                 return `TASK CONTEXT (from Iterator):\n${instructionMatch[1].trim()}\n\nTARGET FILE CONTENT (${path}):\n${content}`;
             }
         }
@@ -144,10 +158,8 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
         const path = node.data.localPath || '.';
         if (node.data.useLocalBridge) {
             const files = await bridgeListFiles(path, aiSettings);
-            const limit = 50;
-            const displayed = files.slice(0, limit);
-            const more = files.length > limit ? `\n...and ${files.length - limit} more` : '';
-            return `FILE TREE (${path}):\n${displayed.join('\n')}${more}`;
+            // We return ALL files for the "Context Finder" to see, but cap visual output if needed
+            return `FILE TREE (${path}):\n${files.join('\n')}`;
         }
         return "Simulated File Tree:\n/src\n  app.tsx\n  types.ts\n/components\n  Header.tsx\npackage.json";
     },
@@ -178,9 +190,7 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
         // Safety: If push/commit, require prior Approval node
         if (['push', 'commit'].includes(cmd)) {
             const hasApproval = parents.some(p => p.type === NodeType.APPROVAL && p.data.status === 'success');
-            // We can also allow if it's following a successful Unit Test, but Approval is safer for now.
             if (!hasApproval) {
-                // Return string but DO NOT execute if bridge enabled, unless user adds a "Force" flag (future)
                 return `[Safety Block] Git '${cmd}' requires a successful Approval node as a parent. Operation skipped.`;
             }
         }
@@ -201,10 +211,8 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
             output = `[Simulation] Git Command: ${fullCmd}`;
         }
 
-        // New Safety Check Logic
         if (cmd === 'status' && node.data.gitStopOnDirty) {
              const lower = output.toLowerCase();
-             // Standard git status clean messages
              const isClean = lower.includes("nothing to commit") || lower.includes("working tree clean");
              if (!isClean) {
                  throw new Error("Git Status: Working directory is dirty. Please commit changes or clean working tree.");
@@ -273,7 +281,6 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
         const isFinished = nextIndex >= tasks.length;
 
         // 3. Update State for this run
-        // We set the output to be the instruction for the *Next* node (Generator)
         updateNodeData(node.id, { 
             iteratorIndex: nextIndex,
             iteratorTotal: tasks.length,
@@ -366,7 +373,22 @@ If you cannot output JSON, use standard markdown code blocks with filenames in h
     [NodeType.SHELL_EXEC]: async ({ node, textContext, vfsString, aiSettings }) => {
          const command = node.data.prompt || "echo 'No command'";
          if (node.data.useLocalBridge) {
-             return await bridgeExecute(command, aiSettings);
+             // Pass the selected shell type (cmd, powershell, bash) to the bridge
+             const type = node.data.shellType || ShellType.CMD;
+             let shellExec: string | undefined;
+             
+             switch(type) {
+                 case ShellType.POWERSHELL: shellExec = 'powershell.exe'; break;
+                 case ShellType.CMD: shellExec = 'cmd.exe'; break;
+                 case ShellType.WSL: shellExec = 'wsl.exe'; break;
+                 case ShellType.BASH: shellExec = 'bash'; break;
+                 case ShellType.ZSH: shellExec = 'zsh'; break;
+                 case ShellType.FISH: shellExec = 'fish'; break;
+                 case ShellType.SH: shellExec = 'sh'; break;
+                 default: shellExec = undefined; // Fallback
+             }
+             
+             return await bridgeExecute(command, aiSettings, shellExec);
          } else {
              return await executeShellCommand(command, aiSettings, `${vfsString}\n\n${textContext}`, node.data.useAiSimulation ?? true);
          }
@@ -408,7 +430,6 @@ If you cannot output JSON, use standard markdown code blocks with filenames in h
 
     [NodeType.DIFF]: async ({ node, parents }) => {
         if (parents.length === 0) return "Warning: No input nodes.";
-        // Diff logic is mostly visual in properties panel, but we return a summary here
         return "Diff computed. View in Properties Panel.";
     }
 };
@@ -456,15 +477,14 @@ export const executeNode = async (
         if ([NodeType.GEMINI_GENERATE, NodeType.READ_FILE, NodeType.ARCHITECT, NodeType.AI_DEBATE].includes(node.type)) {
              // If local read, we already have it in context, but parseOutputToFiles helps standardizing
              if (node.type === NodeType.READ_FILE && node.data.useLocalBridge) {
-                 // The result might now contain metadata headers, but we can treat it as content for now
-                 // or re-parse if needed. For simplicity, we just key it to the path.
-                 extractedFiles = { [node.data.localPath!]: result };
+                 // For local reads, we store content keyed by path if possible
+                 // But simply returning the content is often enough for textContext
+                 extractedFiles = parseOutputToFiles(result); 
              } else {
                  extractedFiles = parseOutputToFiles(result);
              }
         }
 
-        // For Diff nodes, calculate specific diff props
         if (node.type === NodeType.DIFF) {
              const original = parents[0]?.data.output || parents[0]?.data.code || node.data.prompt || "";
              const modified = parents[1]?.data.output || parents[1]?.data.code || "";

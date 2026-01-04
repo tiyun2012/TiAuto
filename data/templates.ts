@@ -9,8 +9,133 @@ export interface Template {
 
 export const APP_TEMPLATES: Template[] = [
   {
+    name: "Game Gizmo / Feature Creator",
+    description: "Analyzes engine structure, finds related base classes/types, plans the Gizmo, implements it, and verifies it.",
+    nodes: [
+      {
+        id: 'g-trigger',
+        type: NodeType.TRIGGER,
+        position: { x: 50, y: 100 },
+        data: { label: 'New Gizmo Request', status: 'idle', shape: 'circle' }
+      },
+      {
+        id: 'g-index',
+        type: NodeType.PROJECT_INDEX,
+        position: { x: 250, y: 100 },
+        data: { 
+          label: 'Scan Engine', 
+          shape: 'rectangle', 
+          status: 'idle',
+          useLocalBridge: true,
+          localPath: '.' // Root
+        }
+      },
+      {
+        id: 'g-ctx-finder',
+        type: NodeType.GEMINI_GENERATE,
+        position: { x: 250, y: 300 },
+        data: { 
+          label: 'Context Finder', 
+          shape: 'square', 
+          status: 'idle',
+          provider: 'gemini',
+          model: 'gemini-3-flash-preview',
+          prompt: "Look at the file tree.\nIdentify the Base Gizmo class, Math Utilities, and any Type definitions needed to create a new 'Transform Gizmo'.\n\nOUTPUT JSON format:\n{ \"related_files\": [\"src/core/Gizmo.ts\", \"src/math/Vector3.ts\"] }"
+        }
+      },
+      {
+        id: 'g-read',
+        type: NodeType.READ_FILE,
+        position: { x: 500, y: 300 },
+        data: { 
+          label: 'Read Related', 
+          shape: 'rectangle', 
+          status: 'idle',
+          useLocalBridge: true,
+          // Empty path implies it will wait for the 'Context Finder' to provide the list
+          localPath: '' 
+        }
+      },
+      {
+        id: 'g-architect',
+        type: NodeType.ARCHITECT,
+        position: { x: 750, y: 100 },
+        data: { 
+          label: 'Gizmo Architect', 
+          shape: 'square', 
+          status: 'idle',
+          provider: 'gemini', 
+          model: 'gemini-3-pro-preview',
+          prompt: "We need a new Transform Gizmo.\nBased on the 'Read Related' files (Base classes):\n1. Create a plan to implement 'TransformGizmo.ts'.\n2. Ensure it inherits correctly and implements required methods (update, draw).\n3. Output a task list."
+        }
+      },
+      {
+        id: 'g-iterator',
+        type: NodeType.TASK_ITERATOR,
+        position: { x: 50, y: 550 },
+        data: { 
+          label: 'Execution Loop', 
+          shape: 'square', 
+          status: 'idle',
+          iteratorIndex: 0
+        }
+      },
+      {
+        id: 'g-gen',
+        type: NodeType.GEMINI_GENERATE,
+        position: { x: 300, y: 550 },
+        data: { 
+          label: 'Coder', 
+          shape: 'square', 
+          status: 'idle',
+          provider: 'deepseek', // Good for coding
+          model: 'deepseek-coder',
+          prompt: "Implement the file requested by the Iterator.\nUse the context from 'Read Related' to ensure correct imports and inheritance."
+        }
+      },
+      {
+        id: 'g-check',
+        type: NodeType.GEMINI_CHECK,
+        position: { x: 550, y: 550 },
+        data: { 
+          label: 'Compile Check', 
+          shape: 'square', 
+          status: 'idle',
+          prompt: "Check for TypeScript errors, missing imports, or logic flaws."
+        }
+      },
+      {
+        id: 'g-write',
+        type: NodeType.WRITE_FILE,
+        position: { x: 800, y: 550 },
+        data: { 
+          label: 'Save Gizmo', 
+          shape: 'rectangle', 
+          status: 'idle',
+          useLocalBridge: true,
+          localPath: '' // Dynamic
+        }
+      }
+    ],
+    edges: [
+      { id: 'ge-1', source: 'g-trigger', target: 'g-index' },
+      { id: 'ge-2', source: 'g-index', target: 'g-ctx-finder' },
+      { id: 'ge-3', source: 'g-ctx-finder', target: 'g-read' },
+      { id: 'ge-4', source: 'g-read', target: 'g-architect' },
+      
+      { id: 'ge-5', source: 'g-architect', target: 'g-iterator' },
+      { id: 'ge-6', source: 'g-iterator', target: 'g-gen' },
+      
+      // Pass Context to Generator too
+      { id: 'ge-ctx', source: 'g-read', target: 'g-gen' },
+
+      { id: 'ge-7', source: 'g-gen', target: 'g-check' },
+      { id: 'ge-8', source: 'g-check', target: 'g-write' }
+    ]
+  },
+  {
     name: "Feature Implementer (Loop)",
-    description: "The 'God Mode' workflow. Scans your project, plans a complex feature (like a Gizmo), and implements it file-by-file automatically.",
+    description: "The 'God Mode' workflow. Scans your project, plans a complex feature, and implements it file-by-file automatically.",
     nodes: [
       {
         id: 'f-trigger',

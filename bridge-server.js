@@ -47,6 +47,16 @@ const resolvePath = (userPath) => {
     return path.resolve(PROJECT_ROOT, userPath);
 };
 
+// Helper for binary detection
+const isBinary = (buffer) => {
+    // Check start of buffer for null bytes or control characters common in binaries
+    const checkLen = Math.min(buffer.length, 512);
+    for (let i = 0; i < checkLen; i++) {
+        if (buffer[i] === 0) return true;
+    }
+    return false;
+};
+
 // 1. Health Check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', mode: 'local-bridge', root: PROJECT_ROOT });
@@ -73,7 +83,7 @@ app.post('/api/config', async (req, res) => {
 
 // 3. Execute Shell Commands
 app.post('/api/execute', async (req, res) => {
-    const { command, cwd } = req.body;
+    const { command, cwd, shell } = req.body;
     
     if (!command) {
         return res.status(400).json({ error: 'Command is required' });
@@ -82,11 +92,12 @@ app.post('/api/execute', async (req, res) => {
     // Default to PROJECT_ROOT if no specific folder is requested
     const targetCwd = cwd ? resolvePath(cwd) : PROJECT_ROOT;
 
-    console.log(`[EXEC] "${command}" in ${targetCwd}`);
+    console.log(`[EXEC] "${command}" in ${targetCwd} (Shell: ${shell || 'default'})`);
 
     const options = {
         cwd: targetCwd, 
-        maxBuffer: 1024 * 1024 * 10 // 10MB buffer
+        maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+        shell: shell || undefined // Allow overriding shell (e.g., 'powershell.exe')
     };
 
     exec(command, options, (error, stdout, stderr) => {
@@ -98,7 +109,7 @@ app.post('/api/execute', async (req, res) => {
     });
 });
 
-// 4. Read File
+// 4. Read File (Enhanced for Directories)
 app.post('/api/read', async (req, res) => {
     const { path: filePath } = req.body;
     
@@ -107,8 +118,42 @@ app.post('/api/read', async (req, res) => {
     try {
         const absolutePath = resolvePath(filePath);
         console.log(`[READ] ${absolutePath}`);
-        const content = await fs.readFile(absolutePath, 'utf-8');
-        res.json({ content });
+        
+        const stat = await fs.stat(absolutePath);
+
+        if (stat.isDirectory()) {
+            // RECURSIVE READ MODE
+            console.log(`[READ] Detected Directory. Merging contents...`);
+            const files = await getFiles(absolutePath);
+            let mergedContent = "";
+            let fileCount = 0;
+
+            for (const file of files) {
+                // Filter out likely binary extensions just by name to save IO
+                if (/\.(png|jpg|jpeg|gif|ico|pdf|zip|tar|gz|7z|exe|dll|bin|obj|o|a|lib|iso)$/i.test(file)) continue;
+                if (file.includes('.git') || file.includes('node_modules')) continue;
+
+                try {
+                    const buffer = await fs.readFile(file);
+                    if (isBinary(buffer)) continue;
+
+                    const relPath = path.relative(PROJECT_ROOT, file);
+                    mergedContent += `// --- FILE: ${relPath} ---\n${buffer.toString('utf-8')}\n\n`;
+                    fileCount++;
+                } catch(e) {
+                    console.warn(`Skipped ${file}: ${e.message}`);
+                }
+            }
+            
+            if (fileCount === 0) mergedContent = "// (Directory was empty or contained only binary/ignored files)";
+            res.json({ content: mergedContent });
+
+        } else {
+            // SINGLE FILE MODE
+            const content = await fs.readFile(absolutePath, 'utf-8');
+            res.json({ content });
+        }
+
     } catch (error) {
         console.error(`[READ ERROR] ${error.message}`);
         res.status(500).json({ error: error.message });
@@ -175,6 +220,10 @@ app.post('/api/browse', async (req, res) => {
             .filter(d => d.isDirectory())
             .map(d => d.name);
             
+        const files = dirents
+            .filter(d => d.isFile())
+            .map(d => d.name);
+            
         // Get parent directory
         const parent = path.dirname(browsePath);
 
@@ -182,6 +231,7 @@ app.post('/api/browse', async (req, res) => {
             current: browsePath,
             parent: parent === browsePath ? null : parent, // If root, parent is null-ish
             folders: folders,
+            files: files,
             separator: path.sep
         });
     } catch (error) {
@@ -205,7 +255,7 @@ async function getFiles(dir) {
         const res = path.resolve(dir, dirent.name);
         // Ignore heavy folders
         if (dirent.isDirectory()) {
-            if (['node_modules', '.git', 'dist', 'build', '.vs', 'bin', 'obj'].includes(dirent.name)) {
+            if (['node_modules', '.git', 'dist', 'build', '.vs', 'bin', 'obj', '__pycache__', '.idea', '.vscode'].includes(dirent.name)) {
                 return [];
             }
             return getFiles(res);
