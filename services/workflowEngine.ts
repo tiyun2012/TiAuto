@@ -93,15 +93,30 @@ const strategies: Partial<Record<NodeType, (ctx: StrategyContext) => Promise<str
         // 2. EXECUTION
         let content = "";
         if (node.data.useLocalBridge && path) {
-            try {
-                content = await bridgeReadFile(path, aiSettings);
-            } catch (e: any) {
-                // IMPORTANT: If reading fails, assume it's a NEW file creation if we are in a generation loop.
-                // We return an empty marker so the Generator knows to create it.
-                if (e.message.includes('ENOENT') || e.message.includes('no such file')) {
-                    content = "// [NEW FILE] This file does not exist yet. Create it based on the requirements.";
-                } else {
-                    throw e;
+            // NEW: Multi-file support via comma separation
+            if (path.includes(',')) {
+                const paths = path.split(',').map(p => p.trim()).filter(p => p);
+                const results = await Promise.all(paths.map(async (p) => {
+                    try {
+                        const c = await bridgeReadFile(p, aiSettings);
+                        return `// --- FILE: ${p} ---\n${c}`;
+                    } catch (e: any) {
+                         return `// --- FILE: ${p} ---\n(Error reading file: ${e.message})`;
+                    }
+                }));
+                content = results.join('\n\n');
+            } else {
+                // Existing single file logic
+                try {
+                    content = await bridgeReadFile(path, aiSettings);
+                } catch (e: any) {
+                    // IMPORTANT: If reading fails, assume it's a NEW file creation if we are in a generation loop.
+                    // We return an empty marker so the Generator knows to create it.
+                    if (e.message.includes('ENOENT') || e.message.includes('no such file')) {
+                        content = "// [NEW FILE] This file does not exist yet. Create it based on the requirements.";
+                    } else {
+                        throw e;
+                    }
                 }
             }
         } else {

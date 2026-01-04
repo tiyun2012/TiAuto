@@ -145,14 +145,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
           case NodeType.SHELL_EXEC: return "Simulates shell commands. In a desktop version, this would run actual system commands.";
           case NodeType.DIFF: return "Compares the text output of two parent nodes to show what changed.";
           case NodeType.LOOP: return "Requires 2 Inputs: Code + Check Result. It uses AI to fix the code based on the result and retries.";
-          case NodeType.READ_FILE: return "Reads the content of a local file. Use this to feed existing code into a workflow.";
+          case NodeType.READ_FILE: return "Reads the content of local files. Supports multiple paths separated by commas (e.g. 'src/a.ts, src/b.ts').";
           case NodeType.WRITE_FILE: return "Writes the input content to a file on your local disk (via Local Bridge).";
           case NodeType.AI_DEBATE: return "Simulates a conversation between two AI Personas to refine ideas before output.";
           case NodeType.MULTI_CHECK: return "Runs the check against multiple AI providers simultaneously for robust consensus.";
           case NodeType.ROUTER: return "Evaluates a condition using AI and returns TRUE or FALSE.";
           case NodeType.ARCHITECT: return "Analyzes requirements and creates a structured plan for downstream nodes.";
           case NodeType.GIT_CONTROL: return "Manages version control operations (Commit, Push) via the Local Bridge.";
-          case NodeType.PROJECT_INDEX: return "Scans the local directory via Bridge and lists files. Feed this into the Architect so it knows the project structure.";
+          case NodeType.PROJECT_INDEX: return "Lists files in the directory (recursive). DOES NOT read file content. Use Read File for content.";
           case NodeType.TASK_ITERATOR: return "Takes a JSON plan from the Architect and executes the downstream nodes once for each task in the list.";
           default: return "Configure the settings above to control this node.";
       }
@@ -561,12 +561,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, aiSettings, onU
                             <div className="space-y-1">
                                 <input 
                                     type="text"
-                                    placeholder="/path/to/file.txt"
+                                    placeholder="/path/to/file.txt, src/other.ts"
                                     value={node.data.localPath || ''}
                                     onChange={(e) => onUpdateNode(node.id, { localPath: e.target.value })}
                                     className="w-full bg-gray-800 border border-indigo-900/50 rounded p-2 text-sm font-mono focus:ring-1 focus:ring-indigo-500"
                                 />
-                                <p className="text-[10px] text-gray-500">Leave blank to auto-read from Task Iterator.</p>
+                                <p className="text-[10px] text-gray-500">Supports multiple comma-separated paths.</p>
                             </div>
                         )}
                     </div>

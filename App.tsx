@@ -15,7 +15,10 @@ import { APP_TEMPLATES, Template } from './data/templates';
 export default function App() {
   const [nodes, setNodes] = useState<Node[]>(INITIAL_NODES);
   const [edges, setEdges] = useState<Edge[]>(INITIAL_EDGES);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  
+  // Refactored: Support Multiple Selection
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  
   const [isExecuting, setIsExecuting] = useState(false);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -41,23 +44,17 @@ export default function App() {
   // Expanded AI Settings State
   const [aiSettings, setAiSettings] = useState<AISettings>({
       provider: 'gemini',
-      
       geminiKey: process.env.API_KEY || '',
-      
       deepseekKey: process.env.DEEPSEEK_API_KEY || '',
       deepseekModel: 'deepseek-coder',
-      
       qwenKey: '',
       qwenUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
       qwenModel: 'qwen-max',
-
       openaiKey: '',
       openaiUrl: 'https://api.openai.com/v1',
       openaiModel: 'gpt-4o',
-
       localBridgeEnabled: false,
       localBridgeUrl: 'http://localhost:3001',
-      // INITIALIZE THE PATH (Matches your default in server.js)
       localProjectPath: "D:\\Dev\\ti3D_main\\ti3D_new-main" 
   });
 
@@ -100,7 +97,6 @@ export default function App() {
   useEffect(() => {
       if(isLoaded) {
           localStorage.setItem('flowgen-ai-settings-v2', JSON.stringify(aiSettings));
-          // If enabled, check health immediately
           if (aiSettings.localBridgeEnabled) checkBridge();
       }
   }, [aiSettings, isLoaded]);
@@ -115,7 +111,6 @@ export default function App() {
       setBridgeStatus(alive ? 'connected' : 'disconnected');
   };
 
-  // Poll Bridge Health every 10s if enabled
   useEffect(() => {
       if (!aiSettings.localBridgeEnabled) return;
       const interval = setInterval(checkBridge, 10000);
@@ -163,7 +158,7 @@ export default function App() {
     if (window.confirm("Clear canvas? Cannot be undone.")) {
       setNodes([]);
       setEdges([]);
-      setSelectedNodeId(null);
+      setSelectedNodeIds([]);
       setToast({ message: "Canvas cleared.", type: 'info' });
       setLogs([]);
     }
@@ -199,21 +194,18 @@ export default function App() {
     }
   }, [toast]);
 
-  // Logging Helper
   const addLog = (message: string) => {
       const time = new Date().toLocaleTimeString('en-US', { hour12: false });
       setLogs(prev => [`[${time}] ${message}`, ...prev]);
   };
 
-  // --- NEW: Handle Setting Project Root ---
   const handleSetRoot = async () => {
       if (!aiSettings.localBridgeUrl || !aiSettings.localProjectPath) return;
       try {
-          // Call the service function we imported
           await bridgeSetRoot(aiSettings.localProjectPath, aiSettings);
           setToast({ message: "Project Root Updated!", type: 'success' });
           addLog(`Bridge Config: Root set to ${aiSettings.localProjectPath}`);
-          checkBridge(); // Update status
+          checkBridge(); 
       } catch (e: any) {
           setToast({ message: "Failed to set root: " + e.message, type: 'error' });
           addLog(`Error setting root: ${e.message}`);
@@ -267,7 +259,7 @@ export default function App() {
       }
     };
     setNodes(prev => [...prev, newNode]);
-    setSelectedNodeId(id);
+    setSelectedNodeIds([id]);
     addLog(`Added node: ${newNode.data.label}`);
   };
 
@@ -275,11 +267,13 @@ export default function App() {
     setNodes(nodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n));
   };
 
+  // Bulk Delete
   const handleDeleteNode = (id: string) => {
-    setNodes(nodes.filter(n => n.id !== id));
-    setEdges(edges.filter(e => e.source !== id && e.target !== id));
-    if (selectedNodeId === id) setSelectedNodeId(null);
-    addLog(`Deleted node ${id}`);
+    const idsToDelete = selectedNodeIds.includes(id) ? selectedNodeIds : [id];
+    setNodes(nodes.filter(n => !idsToDelete.includes(n.id)));
+    setEdges(edges.filter(e => !idsToDelete.includes(e.source) && !idsToDelete.includes(e.target)));
+    setSelectedNodeIds(prev => prev.filter(pid => !idsToDelete.includes(pid)));
+    addLog(`Deleted ${idsToDelete.length} node(s)`);
   };
 
   const handleDeleteEdge = (id: string) => {
@@ -293,7 +287,6 @@ export default function App() {
       addLog(`Refining node: ${node.data.label}`);
       try {
         handleUpdateNode(id, { status: 'running' });
-        // Pass provider overrides
         const refinedCode = await refineCode(node.data.output, instructions, aiSettings, node.data.model, node.data.provider);
         const extractedFiles = parseOutputToFiles(refinedCode);
         handleUpdateNode(id, { 
@@ -335,7 +328,7 @@ export default function App() {
     };
     setNodes(prev => [...prev, fixNode]);
     setEdges(prev => [...prev, newEdge]);
-    setSelectedNodeId(fixNodeId);
+    setSelectedNodeIds([fixNodeId]);
     setToast({ message: "Created Auto-Fix Node", type: "success" });
     addLog(`Created Auto-Fix node from ${checkNode.data.label}`);
   };
@@ -360,7 +353,6 @@ export default function App() {
   // Execution
   const executeGraph = async (startNodes: Node[], initialNodes: Node[]) => {
     setIsExecuting(true);
-    // Use initialNodes passed from loop to ensure fresh state within the execution context
     await runExecutionLoop(startNodes, initialNodes);
   };
 
@@ -370,17 +362,17 @@ export default function App() {
       const executed = new Set<string>();
       
       while (queue.length > 0) {
-        // Safety Check 1: Stop if user aborted
         if (abortRef.current) return;
 
         const currentNodeRef = queue.shift()!;
         const currentNode = currentNodes.find(n => n.id === currentNodeRef.id);
         if (!currentNode) continue;
         
-        // Visual Tracking
-        setSelectedNodeId(currentNode.id);
+        // Highlight executing node
+        if (!selectedNodeIds.includes(currentNode.id)) {
+            setSelectedNodeIds([currentNode.id]);
+        }
 
-        // If node already successfully executed this run, skip re-execution but check children
         if (executed.has(currentNode.id) || currentNode.data.status === 'success') {
              const childrenEdges = edges.filter(e => e.source === currentNode.id);
              childrenEdges.forEach(e => {
@@ -403,9 +395,7 @@ export default function App() {
         try {
             addLog(`Executing: ${currentNode.data.label}`);
             await executeNode(currentNode, currentNodes, edges, aiSettings, (id, data) => {
-                // Update local loop state
                 currentNodes = currentNodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n);
-                // Update React state
                 setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n));
             });
         } catch (error: any) {
@@ -430,7 +420,6 @@ export default function App() {
              throw error;
         }
         
-        // Refetch node to check status after execution
         const executedNode = currentNodes.find(n => n.id === currentNode.id);
         
         if (executedNode?.data.status === 'success') {
@@ -447,7 +436,6 @@ export default function App() {
             });
         }
         
-        // Increased wait time to 4000ms to respect Free Tier limits
         await new Promise(r => setTimeout(r, 4000));
       }
   };
@@ -460,8 +448,6 @@ export default function App() {
 
   const handleRunWorkflow = async (resume = false) => {
     if (isExecuting) return;
-    
-    // Reset Abort Flag
     abortRef.current = false;
     
     setToast({ message: resume ? "Resuming Workflow..." : "Workflow Started...", type: "info" });
@@ -473,9 +459,8 @@ export default function App() {
     }
 
     setIsExecuting(true);
-    setShowLogs(true); // Auto-open logs
+    setShowLogs(true);
     
-    // 1. Reset State (if not resuming)
     if (!resume) {
         setNodes(prev => prev.map(n => ({ 
             ...n, 
@@ -490,7 +475,6 @@ export default function App() {
                 iteratorTotal: 0
             } 
         })));
-        // Allow state to settle before starting
         await new Promise(r => setTimeout(r, 100));
     }
 
@@ -499,10 +483,9 @@ export default function App() {
             let activeIteratorId: string | null = null;
             let flowComplete = false;
             let cycleCount = 0;
-            const MAX_CYCLES = 50; // Safety limit
+            const MAX_CYCLES = 50; 
 
             while (!flowComplete && cycleCount < MAX_CYCLES) {
-                // Safety Check 2: Stop if user aborted
                 if (abortRef.current) {
                     setToast({ message: "Workflow stopped by user.", type: 'info' });
                     addLog("Workflow stopped.");
@@ -510,50 +493,31 @@ export default function App() {
                 }
 
                 cycleCount++;
-                
-                // Fetch fresh state from ref at start of loop
                 let currentNodes = nodesRef.current;
                 let startNodes: Node[] = [];
 
                 if (activeIteratorId) {
-                    // Loop Mode: Start from the Iterator
-                    
                     const downstreamIds = getDownstreamNodes(activeIteratorId, currentNodes, edges);
-                    
-                    // Reset downstream nodes to 'idle' so they can run again
                     setNodes(prev => prev.map(n => {
-                        // Keep success/approval/architect/index history intact
                         if (n.type === NodeType.APPROVAL || n.type === NodeType.PROJECT_INDEX || n.type === NodeType.ARCHITECT) return n;
-                        
-                        // Reset downstream + iterator itself to idle
                         if (downstreamIds.has(n.id) || n.id === activeIteratorId) {
                             return { ...n, data: { ...n.data, status: 'idle' as const, output: undefined, files: undefined } };
                         }
                         return n;
                     }));
-                    
-                    // Allow UI to update and state to settle
                     await new Promise(r => setTimeout(r, 400)); 
-                    
-                    // REFRESH state from ref after the wait
                     currentNodes = nodesRef.current;
-                    
                     const readyIterator = currentNodes.find(n => n.id === activeIteratorId);
                     if (readyIterator) startNodes = [readyIterator];
-                    
                 } else {
-                    // Standard Mode: Start from Triggers
                     startNodes = currentNodes.filter(n => n.type === NodeType.TRIGGER || (resume && n.type === NodeType.APPROVAL && n.data.status === 'success'));
                 }
 
                 if (startNodes.length === 0 && cycleCount === 1) throw new Error("No Start Trigger found.");
                 if (startNodes.length === 0) break; 
 
-                // Execute Graph (Linear Pass) - Pass currentNodes to ensure we use the reset state
                 await executeGraph(startNodes, currentNodes);
                 
-                // Check if we entered an iterator phase (The "Auto" Logic)
-                // We must fetch fresh state again to see if Iterator finished
                 currentNodes = nodesRef.current;
                 const iterator = currentNodes.find(n => n.type === NodeType.TASK_ITERATOR);
                 
@@ -561,14 +525,13 @@ export default function App() {
                     activeIteratorId = iterator.id;
                     setToast({ message: `Cycle ${iterator.data.iteratorIndex} / ${iterator.data.iteratorTotal || '?'}: Processing...`, type: 'info' });
                     addLog(`Iterator Cycle ${iterator.data.iteratorIndex} starting...`);
-                    // Loop continues...
                 } else {
                     flowComplete = true;
                 }
             }
             
             if (abortRef.current) {
-                // Already handled
+                // handled
             } else if (cycleCount >= MAX_CYCLES) {
                 setToast({ message: "Max cycles reached.", type: 'error' });
                 addLog("Error: Max cycles limit reached.");
@@ -590,11 +553,9 @@ export default function App() {
   };
 
   const handleRunNode = async (nodeId: string, action?: string) => {
-      // Special Handling for Approval Node Buttons
       if (action === 'approve' || action === 'reject') {
           if (action === 'approve') {
                handleUpdateNode(nodeId, { status: 'success' });
-               // Trigger resume
                setTimeout(() => handleRunWorkflow(true), 100);
           } else {
                handleUpdateNode(nodeId, { status: 'error', errorMessage: 'Rejected by User' });
@@ -608,7 +569,6 @@ export default function App() {
       addLog(`Manual execution: Node ${nodeId}`);
       setIsExecuting(true);
       try {
-          // Reset just this node
           setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status: 'idle' as const, errorMessage: undefined } } : n));
           const targetNode = nodes.find(n => n.id === nodeId);
           if (!targetNode) throw new Error("Node not found");
@@ -643,7 +603,8 @@ export default function App() {
       }
   };
 
-  const selectedNode = nodes.find(n => n.id === selectedNodeId) || null;
+  // Properties Panel Logic: Show if exactly 1 node selected, or last one
+  const selectedNode = nodes.find(n => selectedNodeIds.includes(n.id) && n.id === selectedNodeIds[selectedNodeIds.length - 1]) || null;
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-gray-950 text-white font-sans">
@@ -658,7 +619,6 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-3">
-                {/* Run / Stop Controls in Header */}
                 <div className="mr-4 flex items-center gap-2">
                     {!isExecuting ? (
                         <button 
@@ -676,9 +636,7 @@ export default function App() {
                         </button>
                     )}
                 </div>
-
                 <div className="h-6 w-px bg-gray-800 mx-1"></div>
-
                 <button 
                   onClick={() => setShowTemplates(true)}
                   className="flex items-center gap-2 hover:bg-gray-800 px-3 py-1.5 rounded text-xs font-medium text-gray-400 hover:text-white transition-colors"
@@ -701,25 +659,14 @@ export default function App() {
                     <Trash className="w-4 h-4" />
                   </button>
                 </div>
-                
-                {/* Enhanced Provider Status Button */}
                 <button 
                     onClick={() => setShowSettings(true)}
                     className="flex items-center gap-3 px-3 py-1.5 rounded-lg border border-gray-800 hover:bg-gray-800 transition-all group"
                     title="Configure AI Providers"
                 >
                     <div className="flex items-center -space-x-2">
-                        {/* Gemini Dot */}
                         <div className={`w-3 h-3 rounded-full border-2 border-gray-900 ${aiSettings.geminiKey ? 'bg-blue-500' : 'bg-gray-700'}`} title="Gemini"></div>
-                        
-                        {/* Local Bridge Dot with Auto-Status */}
-                        <div className={`w-3 h-3 rounded-full border-2 border-gray-900 relative ${
-                            !aiSettings.localBridgeEnabled ? 'bg-gray-700' : 
-                            bridgeStatus === 'connected' ? 'bg-green-500' : 
-                            bridgeStatus === 'disconnected' ? 'bg-red-500' : 'bg-yellow-500'
-                        }`} title="Local Bridge">
-                             {aiSettings.localBridgeEnabled && bridgeStatus === 'disconnected' && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-red-400 rounded-full animate-ping"></span>}
-                        </div>
+                        <div className={`w-3 h-3 rounded-full border-2 border-gray-900 ${aiSettings.localBridgeEnabled ? 'bg-green-500' : 'bg-gray-700'}`} title="Local Bridge"></div>
                     </div>
                     <div className="flex flex-col items-start">
                         <span className="text-[10px] font-bold text-gray-400 group-hover:text-white leading-none uppercase tracking-wider">Providers</span>
@@ -739,8 +686,8 @@ export default function App() {
                 edges={edges}
                 onNodesChange={setNodes}
                 onEdgesChange={setEdges}
-                onSelectNode={setSelectedNodeId}
-                selectedNodeId={selectedNodeId}
+                onSelectNode={setSelectedNodeIds} // Pass array setter
+                selectedNodeIds={selectedNodeIds} // Pass array
                 addNode={handleAddNode}
                 onDeleteNode={handleDeleteNode}
                 onDeleteEdge={handleDeleteEdge}
@@ -756,7 +703,6 @@ export default function App() {
                 )}
             </div>
             
-            {/* Logs Drawer */}
             {showLogs && (
                 <div className="h-48 bg-gray-900 border-t border-gray-800 flex flex-col animate-in slide-in-from-bottom-5">
                     <div className="px-4 py-1.5 bg-gray-850 border-b border-gray-800 flex justify-between items-center">
@@ -778,7 +724,6 @@ export default function App() {
                 </div>
             )}
 
-            {/* Bottom Status Bar */}
             <div className="h-8 bg-gray-900 border-t border-gray-800 flex items-center px-4 gap-6 text-[11px] text-gray-500 select-none z-30 shrink-0 justify-between">
                 <div className="flex gap-6">
                     <div className="flex items-center gap-1.5"><MousePointer2 className="w-3 h-3 opacity-70" /><span>Select Node</span></div>
@@ -805,7 +750,7 @@ export default function App() {
             aiSettings={aiSettings}
             onUpdateNode={handleUpdateNode}
             onDeleteNode={handleDeleteNode}
-            onClose={() => setSelectedNodeId(null)}
+            onClose={() => setSelectedNodeIds([])}
             onRefineNode={handleRefineNode}
             onAutoFix={handleAutoFix}
           />
@@ -838,7 +783,6 @@ export default function App() {
 
         {showJsonView && <JsonViewModal data={{ nodes, edges, version: 1 }} onClose={() => setShowJsonView(false)} />}
 
-        {/* Enhanced Settings Modal */}
         {showSettings && (
             <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center animate-in fade-in">
                 <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -847,8 +791,6 @@ export default function App() {
                         <button onClick={() => setShowSettings(false)}><X className="w-5 h-5" /></button>
                     </div>
                     <div className="p-6 overflow-y-auto space-y-8">
-                        
-                        {/* Global Default */}
                         <div className="space-y-3 pb-6 border-b border-gray-800">
                              <label className="text-sm font-bold text-gray-400 uppercase tracking-wider">Default Provider</label>
                              <div className="grid grid-cols-4 gap-2">
@@ -864,28 +806,11 @@ export default function App() {
                              </div>
                         </div>
 
-                        {/* Local Bridge Config - Highlighting this for Project Management */}
                         <div className="space-y-3 pb-6 border-b border-gray-800 bg-gray-850/50 p-4 rounded-lg border border-indigo-900/30">
-                            <div className="flex items-center justify-between mb-2">
-                                <h3 className="font-medium text-white flex items-center gap-2"><Network className="w-4 h-4 text-indigo-400" /> Local Bridge</h3>
-                                
-                                {/* Status Indicator */}
-                                {aiSettings.localBridgeEnabled && (
-                                    <div className={`flex items-center gap-2 px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${
-                                        bridgeStatus === 'connected' ? 'bg-green-900/30 text-green-400 border-green-800' : 
-                                        bridgeStatus === 'disconnected' ? 'bg-red-900/30 text-red-400 border-red-800' : 
-                                        'bg-gray-700 text-gray-400 border-gray-600'
-                                    }`}>
-                                        {bridgeStatus === 'connected' ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                                        {bridgeStatus === 'connected' ? 'Connected' : bridgeStatus === 'disconnected' ? 'Offline' : 'Unknown'}
-                                    </div>
-                                )}
-                            </div>
+                            <h3 className="font-medium text-white flex items-center gap-2"><Network className="w-4 h-4 text-indigo-400" /> Local Bridge (Game Engine Mode)</h3>
+                            <p className="text-xs text-gray-400">Enables Read/Write/Run on your local machine via a local server.</p>
                             
-                            <p className="text-xs text-gray-400 mb-4">Enables Read/Write/Run on your local machine via a local server.</p>
-                            
-                            <div className="flex flex-col gap-4">
-                                {/* Enable / Disable */}
+                            <div className="flex flex-col gap-4 mt-2">
                                 <div className="flex items-center gap-3">
                                     <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
                                         <input 
@@ -903,7 +828,7 @@ export default function App() {
                                         className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm" 
                                         placeholder="http://localhost:3001" 
                                     />
-                                    <button
+                                     <button
                                         onClick={handleTestBridgeConnection}
                                         disabled={!aiSettings.localBridgeEnabled}
                                         className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-200 px-3 py-2 rounded text-xs font-bold whitespace-nowrap"
@@ -911,17 +836,6 @@ export default function App() {
                                         Test Connection
                                     </button>
                                 </div>
-                                
-                                {/* Help Tip for Cloud IDEs */}
-                                <div className="p-2 rounded bg-blue-900/20 border border-blue-900/50 flex gap-2">
-                                    <HelpCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
-                                    <div className="text-[10px] text-gray-400">
-                                        <span className="font-bold text-blue-300 block mb-0.5">Don't see Port 3001?</span>
-                                        If in VS Code Web/IDX: Open "Ports" tab → Click "Add Port" → Enter 3001 → Copy the URL here.
-                                    </div>
-                                </div>
-
-                                {/* Project Path Config */}
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Host Project Path (Root)</label>
                                     <div className="flex gap-2">
@@ -941,7 +855,7 @@ export default function App() {
                                         </button>
                                         <button 
                                             onClick={handleSetRoot}
-                                            disabled={!aiSettings.localBridgeEnabled || bridgeStatus !== 'connected'}
+                                            disabled={!aiSettings.localBridgeEnabled}
                                             className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white px-3 py-2 rounded text-xs font-bold whitespace-nowrap"
                                         >
                                             Set Root
@@ -955,7 +869,6 @@ export default function App() {
                             </div>
                         </div>
 
-                        {/* Gemini Config */}
                         <div className="space-y-3">
                             <h3 className="font-medium text-white flex items-center gap-2"><span className="w-2 h-6 bg-blue-500 rounded-full"></span> Google Gemini</h3>
                             <div className="space-y-1">
@@ -964,7 +877,6 @@ export default function App() {
                             </div>
                         </div>
 
-                        {/* DeepSeek Config */}
                         <div className="space-y-3">
                             <h3 className="font-medium text-white flex items-center gap-2"><span className="w-2 h-6 bg-purple-500 rounded-full"></span> DeepSeek</h3>
                              <div className="grid grid-cols-2 gap-4">
