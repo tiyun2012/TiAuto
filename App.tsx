@@ -9,7 +9,7 @@ import { executeNode } from './services/workflowEngine';
 import { refineCode } from './services/geminiService';
 import { parseOutputToFiles } from './services/fileParsingService';
 import { bridgeSetRoot, checkBridgeHealth } from './services/localBridgeService'; 
-import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson, Settings, Key, Server, Link, Network, Square, Play, ScrollText, ChevronUp, ChevronDown, Wifi, WifiOff, HelpCircle, RefreshCw } from 'lucide-react';
+import { Box, Code2, MousePointer2, Move, ZoomIn, CheckCircle2, AlertCircle, Save, FolderOpen, Download, Trash, LayoutTemplate, X, FileJson, Settings, Key, Server, Link, Network, Square, Play, ScrollText, ChevronUp, ChevronDown, Wifi, WifiOff, HelpCircle } from 'lucide-react';
 import { APP_TEMPLATES, Template } from './data/templates';
 
 export default function App() {
@@ -30,7 +30,7 @@ export default function App() {
   const [showFileBrowser, setShowFileBrowser] = useState(false);
   
   // Bridge Health State
-  const [bridgeStatus, setBridgeStatus] = useState<'unknown' | 'connected' | 'disconnected' | 'checking'>('unknown');
+  const [bridgeStatus, setBridgeStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown');
 
   // New: Logs & Safety
   const [logs, setLogs] = useState<string[]>([]);
@@ -97,39 +97,25 @@ export default function App() {
   useEffect(() => {
       if(isLoaded) {
           localStorage.setItem('flowgen-ai-settings-v2', JSON.stringify(aiSettings));
+          if (aiSettings.localBridgeEnabled) checkBridge();
       }
   }, [aiSettings, isLoaded]);
 
-  // --- Auto Bridge Health Check (Immediate & Interval) ---
-  useEffect(() => {
+  // Bridge Health Check
+  const checkBridge = async () => {
       if (!aiSettings.localBridgeEnabled) {
           setBridgeStatus('unknown');
           return;
       }
+      const alive = await checkBridgeHealth(aiSettings.localBridgeUrl);
+      setBridgeStatus(alive ? 'connected' : 'disconnected');
+  };
 
-      let mounted = true;
-      const check = async () => {
-          if(!mounted) return;
-          setBridgeStatus('checking');
-          const alive = await checkBridgeHealth(aiSettings.localBridgeUrl);
-          if(mounted) setBridgeStatus(alive ? 'connected' : 'disconnected');
-      };
-
-      // Debounce check on URL change (500ms)
-      const timer = setTimeout(() => {
-          check();
-      }, 500);
-
-      // Also check periodically
-      const interval = setInterval(check, 10000);
-
-      return () => {
-          mounted = false;
-          clearTimeout(timer);
-          clearInterval(interval);
-      };
+  useEffect(() => {
+      if (!aiSettings.localBridgeEnabled) return;
+      const interval = setInterval(checkBridge, 10000);
+      return () => clearInterval(interval);
   }, [aiSettings.localBridgeEnabled, aiSettings.localBridgeUrl]);
-
 
   // File Handlers
   const handleExport = () => {
@@ -219,9 +205,7 @@ export default function App() {
           await bridgeSetRoot(aiSettings.localProjectPath, aiSettings);
           setToast({ message: "Project Root Updated!", type: 'success' });
           addLog(`Bridge Config: Root set to ${aiSettings.localProjectPath}`);
-          // Trigger a re-check
-          const alive = await checkBridgeHealth(aiSettings.localBridgeUrl);
-          setBridgeStatus(alive ? 'connected' : 'disconnected');
+          checkBridge(); 
       } catch (e: any) {
           setToast({ message: "Failed to set root: " + e.message, type: 'error' });
           addLog(`Error setting root: ${e.message}`);
@@ -231,6 +215,18 @@ export default function App() {
 
   const handleBrowseSelect = (path: string) => {
       setAiSettings(s => ({ ...s, localProjectPath: path }));
+  };
+
+  const handleTestBridgeConnection = async () => {
+      setToast({ message: "Testing connection...", type: "info" });
+      const alive = await checkBridgeHealth(aiSettings.localBridgeUrl);
+      if (alive) {
+          setBridgeStatus('connected');
+          setToast({ message: "Connection Successful!", type: "success" });
+      } else {
+          setBridgeStatus('disconnected');
+          setToast({ message: "Connection Failed. Check terminal.", type: "error" });
+      }
   };
 
   // Node Actions
@@ -595,6 +591,18 @@ export default function App() {
       }
   };
   
+  const handleSetBridgeRoot = async () => {
+      try {
+          setToast({ message: "Updating Bridge Root...", type: "info" });
+          const newRoot = await bridgeSetRoot(aiSettings.localProjectPath, aiSettings);
+          setToast({ message: `Success: Bridge Root set to ${newRoot}`, type: "success" });
+          addLog(`Bridge root updated to: ${newRoot}`);
+      } catch (error: any) {
+          setToast({ message: `Error setting root: ${error.message}`, type: "error" });
+          addLog(`Failed to set bridge root: ${error.message}`);
+      }
+  };
+
   // Properties Panel Logic: Show if exactly 1 node selected, or last one
   const selectedNode = nodes.find(n => selectedNodeIds.includes(n.id) && n.id === selectedNodeIds[selectedNodeIds.length - 1]) || null;
 
@@ -804,7 +812,7 @@ export default function App() {
                             
                             <div className="flex flex-col gap-4 mt-2">
                                 <div className="flex items-center gap-3">
-                                    <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer min-w-[120px]">
+                                    <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
                                         <input 
                                             type="checkbox" 
                                             checked={aiSettings.localBridgeEnabled} 
@@ -813,32 +821,20 @@ export default function App() {
                                         />
                                         Enable Bridge
                                     </label>
-                                    
-                                    {/* Bridge Status Indicator & URL Input */}
-                                    <div className="flex-1 flex items-center gap-2 bg-gray-800 border border-gray-700 rounded p-1 pr-3">
-                                        <input 
-                                            type="text" 
-                                            value={aiSettings.localBridgeUrl} 
-                                            onChange={(e) => setAiSettings(s => ({...s, localBridgeUrl: e.target.value}))} 
-                                            className="flex-1 bg-transparent border-none text-sm focus:ring-0 text-white pl-2" 
-                                            placeholder="http://localhost:3001" 
-                                        />
-                                        {aiSettings.localBridgeEnabled && (
-                                            <div className="flex items-center gap-1.5 shrink-0 pl-2 border-l border-gray-700/50">
-                                                {bridgeStatus === 'checking' && <RefreshCw className="w-3 h-3 text-yellow-500 animate-spin" />}
-                                                {bridgeStatus === 'connected' && <div className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>}
-                                                {bridgeStatus === 'disconnected' && <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>}
-                                                {bridgeStatus === 'unknown' && <div className="w-2.5 h-2.5 rounded-full bg-gray-600"></div>}
-                                                
-                                                <span className={`text-[10px] font-medium ${
-                                                    bridgeStatus === 'connected' ? 'text-green-400' : 
-                                                    bridgeStatus === 'disconnected' ? 'text-red-400' : 'text-gray-500'
-                                                }`}>
-                                                    {bridgeStatus === 'connected' ? 'Online' : bridgeStatus === 'disconnected' ? 'Offline' : bridgeStatus === 'checking' ? 'Checking' : ''}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
+                                    <input 
+                                        type="text" 
+                                        value={aiSettings.localBridgeUrl} 
+                                        onChange={(e) => setAiSettings(s => ({...s, localBridgeUrl: e.target.value}))} 
+                                        className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm" 
+                                        placeholder="http://localhost:3001" 
+                                    />
+                                     <button
+                                        onClick={handleTestBridgeConnection}
+                                        disabled={!aiSettings.localBridgeEnabled}
+                                        className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-200 px-3 py-2 rounded text-xs font-bold whitespace-nowrap"
+                                    >
+                                        Test Connection
+                                    </button>
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Host Project Path (Root)</label>

@@ -1,0 +1,77 @@
+{
+  "nodes": [
+    {
+      "id": "qa-trigger",
+      "type": "TRIGGER",
+      "position": {
+        "x": 50,
+        "y": 300
+      },
+      "data": {
+        "label": "Start QA",
+        "status": "idle",
+        "shape": "circle"
+      }
+    },
+    {
+      "id": "qa-gen",
+      "type": "GEMINI_GENERATE",
+      "position": {
+        "x": 250,
+        "y": 200
+      },
+      "data": {
+        "label": "Generate Function",
+        "shape": "square",
+        "status": "idle",
+        "prompt": "Write a Python function 'parse_user_data' that takes a raw JSON string, parses it, and validates 'email' and 'age' fields."
+      }
+    },
+    {
+      "id": "qa-test",
+      "type": "AI_UNIT_TEST",
+      "position": {
+        "x": 550,
+        "y": 100
+      },
+      "data": {
+        "label": "Generate Tests",
+        "shape": "square",
+        "status": "idle",
+        "prompt": "Write pytest unit tests. Include edge cases for malformed JSON and invalid emails."
+      }
+    },
+    {
+      "id": "qa-check",
+      "type": "GEMINI_CHECK",
+      "position": {
+        "x": 550,
+        "y": 300
+      },
+      "data": {
+        "label": "Security Scan",
+        "shape": "square",
+        "status": "idle",
+        "prompt": "Check for denial of service vulnerabilities in regex or exception handling."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "qae-1",
+      "source": "qa-trigger",
+      "target": "qa-gen"
+    },
+    {
+      "id": "qae-2",
+      "source": "qa-gen",
+      "target": "qa-test"
+    },
+    {
+      "id": "qae-3",
+      "source": "qa-gen",
+      "target": "qa-check"
+    }
+  ],
+  "version": 1
+}

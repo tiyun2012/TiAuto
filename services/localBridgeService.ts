@@ -12,7 +12,7 @@ import { AISettings } from "../types";
  * POST /api/write { path: string, content: string } -> { success: boolean }
  * POST /api/list { path: string } -> { files: string[] }
  * POST /api/config { projectRoot: string } -> { success: boolean, root: string }
- * POST /api/browse { targetPath: string } -> { current: string, parent: string, folders: string[], files: string[] }
+ * POST /api/browse { targetPath: string } -> { current: string, parent: string, folders: string[] }
  */
 
 // Helper to sanitize URL (remove trailing slash)
@@ -99,10 +99,10 @@ export const bridgeSetRoot = async (path: string, settings: AISettings): Promise
     return data.root;
 };
 
-export const bridgeExecute = async (command: string, settings: AISettings, shell?: string): Promise<string> => {
+export const bridgeExecute = async (command: string, settings: AISettings): Promise<string> => {
     checkEnabled(settings);
     const url = `${cleanUrl(settings.localBridgeUrl)}/api/execute`;
-    const data = await handleBridgeRequest(url, { command, shell }, "Bridge Execution Failed");
+    const data = await handleBridgeRequest(url, { command }, "Bridge Execution Failed");
     
     // Combine stdout and stderr for the logs
     let output = data.stdout || "";
@@ -136,7 +136,6 @@ export interface BrowserData {
     current: string;
     parent: string | null;
     folders: string[];
-    files: string[];
     separator: string;
 }
 

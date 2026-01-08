@@ -1,0 +1,54 @@
+{
+  "nodes": [
+    {
+      "id": "d-trigger",
+      "type": "TRIGGER",
+      "position": {
+        "x": 50,
+        "y": 300
+      },
+      "data": {
+        "label": "Start",
+        "status": "idle",
+        "shape": "circle"
+      }
+    },
+    {
+      "id": "d-shell",
+      "type": "SHELL_EXEC",
+      "position": {
+        "x": 300,
+        "y": 200
+      },
+      "data": {
+        "label": "Simulate Deploy",
+        "shape": "square",
+        "status": "idle",
+        "useAiSimulation": true,
+        "prompt": "npm install && npm run build && docker build -t myapp ."
+      }
+    },
+    {
+      "id": "d-note",
+      "type": "NOTE",
+      "position": {
+        "x": 300,
+        "y": 400
+      },
+      "data": {
+        "label": "Info",
+        "shape": "rectangle",
+        "status": "idle",
+        "prompt": "Since we are in the browser, the Shell node uses AI to predict what the terminal output would look like."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "de-1",
+      "source": "d-trigger",
+      "target": "d-shell"
+    }
+  ],
+  "version": 1
+}

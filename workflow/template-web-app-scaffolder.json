@@ -1,0 +1,58 @@
+{
+  "nodes": [
+    {
+      "id": "w-trigger",
+      "type": "TRIGGER",
+      "position": {
+        "x": 50,
+        "y": 300
+      },
+      "data": {
+        "label": "Start",
+        "status": "idle",
+        "shape": "circle"
+      }
+    },
+    {
+      "id": "w-gen",
+      "type": "GEMINI_GENERATE",
+      "position": {
+        "x": 300,
+        "y": 200
+      },
+      "data": {
+        "label": "Scaffold Login Page",
+        "shape": "rectangle",
+        "status": "idle",
+        "prompt": "Create a modern login page. \nOutput 3 files:\n1. index.html\n2. style.css (dark mode)\n3. app.js (form validation)"
+      }
+    },
+    {
+      "id": "w-check",
+      "type": "GEMINI_CHECK",
+      "position": {
+        "x": 650,
+        "y": 200
+      },
+      "data": {
+        "label": "Accessibility Audit",
+        "shape": "rectangle",
+        "status": "idle",
+        "prompt": "Review the HTML and CSS for WCAG compliance. Check color contrast and aria-labels."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "we-1",
+      "source": "w-trigger",
+      "target": "w-gen"
+    },
+    {
+      "id": "we-2",
+      "source": "w-gen",
+      "target": "w-check"
+    }
+  ],
+  "version": 1
+}

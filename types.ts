@@ -25,16 +25,6 @@ export enum NodeType {
   LOOP = 'LOOP'
 }
 
-export enum ShellType {
-  CMD = 'cmd',
-  POWERSHELL = 'powershell',
-  BASH = 'bash',
-  WSL = 'wsl',
-  ZSH = 'zsh',
-  FISH = 'fish',
-  SH = 'sh'
-}
-
 export type NodeShape = 'rectangle' | 'square' | 'circle';
 
 export type AIProvider = 'gemini' | 'deepseek' | 'qwen' | 'openai';
@@ -63,9 +53,6 @@ export interface NodeData {
   // Local Bridge Config
   useLocalBridge?: boolean;
   localPath?: string;
-  
-  // Shell Config
-  shellType?: ShellType;
 
   // Git Config
   gitCommand?: 'status' | 'add' | 'commit' | 'push' | 'log';

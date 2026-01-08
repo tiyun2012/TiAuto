@@ -1,0 +1,82 @@
+{
+  "nodes": [
+    {
+      "id": "diff-trigger",
+      "type": "TRIGGER",
+      "position": {
+        "x": 50,
+        "y": 300
+      },
+      "data": {
+        "label": "Start Diff",
+        "status": "idle",
+        "shape": "circle"
+      }
+    },
+    {
+      "id": "diff-v1",
+      "type": "GEMINI_GENERATE",
+      "position": {
+        "x": 300,
+        "y": 150
+      },
+      "data": {
+        "label": "Bubble Sort (V1)",
+        "shape": "square",
+        "status": "idle",
+        "prompt": "Write a Python function for Bubble Sort."
+      }
+    },
+    {
+      "id": "diff-v2",
+      "type": "GEMINI_GENERATE",
+      "position": {
+        "x": 300,
+        "y": 450
+      },
+      "data": {
+        "label": "Quick Sort (V2)",
+        "shape": "square",
+        "status": "idle",
+        "prompt": "Write a Python function for Quick Sort."
+      }
+    },
+    {
+      "id": "diff-node",
+      "type": "DIFF",
+      "position": {
+        "x": 600,
+        "y": 300
+      },
+      "data": {
+        "label": "Compare Algos",
+        "shape": "square",
+        "status": "idle",
+        "prompt": ""
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "diffe-1",
+      "source": "diff-trigger",
+      "target": "diff-v1"
+    },
+    {
+      "id": "diffe-2",
+      "source": "diff-trigger",
+      "target": "diff-v2"
+    },
+    {
+      "id": "diffe-3",
+      "source": "diff-v1",
+      "target": "diff-node"
+    },
+    {
+      "id": "diffe-4",
+      "source": "diff-v2",
+      "target": "diff-node"
+    }
+  ],
+  "version": 1
+}
